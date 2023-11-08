@@ -1,0 +1,31 @@
+name: Build
+
+on:
+  pull_request:
+  push:
+    branches: ['**']
+    tags: [v*]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        otel_tag:
+          - v0.35.0
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Build and Push Docker Image
+        uses: Dwolla/jenkins-agents-workflow/.github/actions/build@main
+        with:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          BASE_TAG: ${{ matrix.OTEL_TAG }}
+          TAG_NAME: OTEL_TAG
+          IMAGE_NAME: dwolla/otel-collector
+  build-complete:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "The build completed successfully"
