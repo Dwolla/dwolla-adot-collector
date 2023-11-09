@@ -7,15 +7,10 @@ Docker image that adds Dwolla's configuration to the AWS distribution of OpenTel
 
 ## Local Development
 
-With [yq](https://kislyuk.github.io/yq/) installed, to build this image locally run the following command:
+With [jq](https://jqlang.github.io/jq/manual/) installed, to build this image locally run the following command:
 
 ```bash
 make \
-    TAG=$(curl --silent https://raw.githubusercontent.com/Dwolla/jenkins-agents-workflow/main/.github/workflows/build-docker-image.yml | \
-        yq .on.workflow_call.inputs.NVM_TAG.default) \
+    OTEL_TAG=$(curl --silent https://api.github.com/repos/aws-observability/aws-otel-collector/releases/latest | jq -r .name) \
     all
 ```
-
-Alternatively, without [yq](https://kislyuk.github.io/yq/) installed, refer to the NVM_TAG default values defined in [jenkins-agents-workflow](https://github.com/Dwolla/jenkins-agents-workflow/blob/main/.github/workflows/build-docker-image.yml) and run the following command:
-
-`make NVM_TAG=<default-nvm-tag-from-jenkins-agents-workflow> all`

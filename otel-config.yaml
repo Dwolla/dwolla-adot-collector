@@ -1,0 +1,54 @@
+extensions:
+  health_check:
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:55681
+  zipkin:
+
+processors:
+  memory_limiter:
+      limit_mib: 100
+      check_interval: 5s
+  batch/traces:
+    timeout: 10s
+    send_batch_size: 50
+  attributes:
+    actions:
+      - key: deployment.environment
+        value: ${env:DWOLLA_ENV}
+        action: insert
+      - key: peer.service
+        action: extract
+        pattern: ^consul!(?P<peerservice>.*)$    # AFAICT using "peer.service" would be an illegal capture group name
+      - key: peer.service
+        action: update
+        from_attribute: peerservice
+      - key: peerservice
+        action: delete
+
+exporters:
+  awsxray:
+    indexed_attributes:
+      - otel.resource.service.name
+      - deployment.environment
+
+service:
+  pipelines:
+    traces:
+      receivers:
+        - otlp
+        - zipkin
+      processors:
+        - memory_limiter
+        - batch/traces
+        - attributes
+      exporters:
+        - awsxray
+
+  extensions:
+    - health_check
