@@ -30,6 +30,9 @@ processors:
         from_attribute: peerservice
       - key: peerservice
         action: delete
+      - key: http.status_code # this is deprecated but X-Ray wants it; see https://aws-otel.github.io/docs/getting-started/x-ray#otel-span-http-attributes-translation
+        action: insert
+        from_attribute: http.response.status_code
 
 exporters:
   awsxray:
