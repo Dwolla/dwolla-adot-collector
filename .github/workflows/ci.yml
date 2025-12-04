@@ -11,7 +11,7 @@ jobs:
     strategy:
       matrix:
         otel_tag:
-          - v0.41.0
+          - v0.45.1
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
