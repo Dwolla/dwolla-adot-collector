@@ -19,7 +19,7 @@ processors:
     send_batch_size: 50
   attributes:
     actions:
-      - key: deployment.environment
+      - key: deployment.environment.name
         value: ${env:DWOLLA_ENV}
         action: insert
       - key: peer.service
@@ -36,9 +36,14 @@ processors:
 
 exporters:
   awsxray:
-    indexed_attributes:
+    indexed_attributes: # see https://github.com/Dwolla/dwolla-otel-natchez/blob/dc1aa448d97a91f50ec52653b3e28d7fbf147f87/dwolla-xray-annotations/src/test/scala/com/dwolla/tracing/XRayAnnotationsSpec.scala#L27-L33
+      - deployment.environment.name
+      - otel.resource.deployment.environment.name
       - otel.resource.service.name
-      - deployment.environment
+      - com.dwolla.client.account.id
+      - com.dwolla.enduser.account.id
+      - com.dwolla.transaction.id
+      - com.dwolla.event-bus.message-handling-result
 
 service:
   pipelines:
