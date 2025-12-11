@@ -1,11 +1,11 @@
-# Use Go 1.23 to match the builder's era and avoid Go 1.24 strictness issues
-FROM golang:1.23-alpine AS builder
+# Use Go 1.24 to satisfy builder v0.141.0 toolchain requirement
+FROM golang:1.24-alpine AS builder
 
 # Install build dependencies
 RUN apk --update add ca-certificates git
 
-# Install the builder tool v0.111.0
-RUN go install go.opentelemetry.io/collector/cmd/builder@v0.111.0
+# Install the builder tool v0.141.0
+RUN go install go.opentelemetry.io/collector/cmd/builder@v0.141.0
 
 WORKDIR /build
 
