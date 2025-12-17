@@ -1,5 +1,6 @@
 extensions:
   health_check:
+    endpoint: 0.0.0.0:13133
 
 receivers:
   otlp:
@@ -22,21 +23,26 @@ processors:
       - key: deployment.environment.name
         value: ${env:DWOLLA_ENV}
         action: insert
-      - key: peer.service
-        action: extract
-        pattern: ^consul!(?P<peerservice>.*)$    # AFAICT using "peer.service" would be an illegal capture group name
-      - key: peer.service
-        action: update
-        from_attribute: peerservice
-      - key: peerservice
-        action: delete
-      - key: http.status_code # this is deprecated but X-Ray wants it; see https://aws-otel.github.io/docs/getting-started/x-ray#otel-span-http-attributes-translation
+      - key: http.status_code # this is deprecated, but X-Ray wants it; see https://aws-otel.github.io/docs/getting-started/x-ray#otel-span-http-attributes-translation
         action: insert
         from_attribute: http.response.status_code
+  transform/replace-exclamation-with-colon:
+    trace_statements:
+      - context: span
+        statements:
+          - replace_pattern(attributes["peer.service"], "!", ":")
+  linkextractor:
+    attribute_name: "linked_trace_ids"
+  transform/flatten-linked-trace-ids:
+    trace_statements:
+      - context: span
+        statements:
+          - set(attributes["linked_trace_ids"], String(attributes["linked_trace_ids"]))
 
 exporters:
   awsxray:
     indexed_attributes: # see https://github.com/Dwolla/dwolla-otel-natchez/blob/dc1aa448d97a91f50ec52653b3e28d7fbf147f87/dwolla-xray-annotations/src/test/scala/com/dwolla/tracing/XRayAnnotationsSpec.scala#L27-L33
+      - linked_trace_ids
       - deployment.environment.name
       - otel.resource.deployment.environment.name
       - otel.resource.service.name
@@ -55,6 +61,9 @@ service:
         - memory_limiter
         - batch/traces
         - attributes
+        - transform/replace-exclamation-with-colon
+        - linkextractor
+        - transform/flatten-linked-trace-ids
       exporters:
         - awsxray
 

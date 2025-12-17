@@ -1,17 +1,18 @@
-OTEL_TAG := $(OTEL_TAG)
-JOB := core-${OTEL_TAG}
-CLEAN_JOB := clean-${OTEL_TAG}
+# Default to loading into local docker daemon. Override with --push for remote.
+OUTPUT ?= --load
+# Default to empty to let Docker pick the local platform. Override for multi-arch.
+PLATFORM ?= 
 
-all: ${JOB}
-clean: ${CLEAN_JOB}
-.PHONY: all clean ${JOB} ${CLEAN_JOB}
+all: core
+clean: clean-core
+.PHONY: all clean core clean-core
 
-${JOB}: core-%: Dockerfile
+core: Dockerfile
 	docker buildx build \
-	  --platform linux/arm64,linux/amd64 \
-	  --build-arg OTEL_TAG=$* \
-	  --tag dwolla/otel-collector:$*-SNAPSHOT \
+	  $(OUTPUT) \
+	  $(if $(PLATFORM),--platform $(PLATFORM),) \
+	  --tag dwolla/otel-collector:latest \
 	  .
 
-${CLEAN_JOB}: clean-%:
-	docker image rm --force dwolla/otel-collector:$*-SNAPSHOT
+clean-core:
+	-docker image rm --force dwolla/otel-collector:latest

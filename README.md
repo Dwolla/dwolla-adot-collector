@@ -3,14 +3,36 @@
 [![](https://images.microbadger.com/badges/image/dwolla/otel-collector.svg)](https://microbadger.com/images/dwolla/otel-collector)
 [![license](https://img.shields.io/github/license/dwolla/dwolla-adot-collector.svg?style=flat-square)](https://github.com/Dwolla/dwolla-adot-collector/blob/master/LICENSE)
 
-Docker image that adds Dwolla's configuration to the AWS distribution of OpenTelemetry collector.
+Custom OpenTelemetry Collector distribution with AWS components and Dwolla-specific processors.
+
+## Why a Custom Build?
+
+This distribution builds upon the AWS Distro for OpenTelemetry (ADOT) by adding:
+
+1. **Transform Processor** - Enables efficient pattern replacement in span attributes (e.g., replacing `!` with `:` in `peer.service`)
+2. **Link Extractor Processor** - Custom processor that extracts linked trace IDs from OpenTelemetry span links and copies them to span attributes
+
+### The Link Extractor Problem
+
+AWS X-Ray does not natively support OpenTelemetry's [span links](https://opentelemetry.io/docs/concepts/signals/traces/#span-links) concept. When traces reference other traces via links, this relationship is lost when exported to X-Ray.
+
+The `linkextractor` processor solves this by:
+- Extracting trace IDs from `span.links`
+- Copying them to a `linked_trace_ids` attribute on the span
+- Making these relationships visible in X-Ray as indexed attributes
+
+This allows Dwolla to maintain trace relationships and query for linked traces in X-Ray.
 
 ## Local Development
 
-With [jq](https://jqlang.github.io/jq/manual/) installed, to build this image locally run the following command:
+To build this image locally:
 
 ```bash
-make \
-    OTEL_TAG=$(curl --silent https://api.github.com/repos/aws-observability/aws-otel-collector/releases/latest | jq -r .name) \
-    all
+make all
+```
+
+For multi-architecture builds:
+
+```bash
+make PLATFORM=linux/arm64,linux/amd64 OUTPUT=--push all
 ```
