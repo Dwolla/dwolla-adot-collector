@@ -8,18 +8,15 @@ import (
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/pdata/ptrace"
 	"go.opentelemetry.io/collector/processor"
-	"go.uber.org/zap"
 )
 
 type linkProcessor struct {
-	logger        *zap.Logger
 	nextConsumer  consumer.Traces
 	attributeName string
 }
 
-func newLinkProcessor(cfg *Config, logger *zap.Logger, next consumer.Traces) (processor.Traces, error) {
+func newLinkProcessor(cfg *Config, next consumer.Traces) (processor.Traces, error) {
 	return &linkProcessor{
-		logger:        logger,
 		nextConsumer:  next,
 		attributeName: cfg.AttributeName,
 	}, nil

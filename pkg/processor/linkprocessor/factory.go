@@ -33,5 +33,5 @@ func createTracesProcessor(
 	nextConsumer consumer.Traces,
 ) (processor.Traces, error) {
 	processorConfig := cfg.(*Config)
-	return newLinkProcessor(processorConfig, set.Logger, nextConsumer)
+	return newLinkProcessor(processorConfig, nextConsumer)
 }
