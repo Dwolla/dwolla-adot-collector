@@ -23,9 +23,6 @@ processors:
       - key: deployment.environment.name
         value: ${env:DWOLLA_ENV}
         action: insert
-      - key: http.status_code # this is deprecated, but X-Ray wants it; see https://aws-otel.github.io/docs/getting-started/x-ray#otel-span-http-attributes-translation
-        action: insert
-        from_attribute: http.response.status_code
   transform/replace-exclamation-with-colon:
     trace_statements:
       - context: span
