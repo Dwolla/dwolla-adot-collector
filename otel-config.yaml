@@ -23,6 +23,35 @@ processors:
       - key: deployment.environment.name
         value: ${env:DWOLLA_ENV}
         action: insert
+
+  # rename attributes to follow OTel semantic conventions
+      - key: url.full
+        action: insert
+        # from https://github.com/typelevel/natchez-http4s/blob/168f5031323a573b5641f43c74a25d1a996f7b61/modules/http4s/src/main/scala/natchez/http4s/NatchezMiddleware.scala#L176
+        from_attribute: client.http.uri
+      - key: http.request.method
+        action: insert
+        # from https://github.com/typelevel/natchez-http4s/blob/168f5031323a573b5641f43c74a25d1a996f7b61/modules/http4s/src/main/scala/natchez/http4s/NatchezMiddleware.scala#L177
+        from_attribute: client.http.method
+      - key: http.response.status_code
+        action: insert
+        # from https://github.com/typelevel/natchez-http4s/blob/168f5031323a573b5641f43c74a25d1a996f7b61/modules/http4s/src/main/scala/natchez/http4s/NatchezMiddleware.scala#L183
+        from_attribute: client.http.status_code
+      - key: http.response.status_code
+        action: insert
+        # from https://github.com/typelevel/natchez-http4s/blob/168f5031323a573b5641f43c74a25d1a996f7b61/modules/http4s/src/main/scala/natchez/http4s/NatchezMiddleware.scala#L58
+        from_attribute: http.status_code
+  # remove the attributes we copied to complete the renaming
+      - action: delete
+        pattern: client\.http\.uri|client\.http\.method|(?:client\.)?http\.status_code
+  transform/status-code-is-int:
+    # Natchez-http4s sets http.response.status_code as a string, but the OTel semantic
+    # conventions define it as an int, and X-Ray won't display it otherwise.
+    # see https://github.com/typelevel/natchez-http4s/blob/168f5031323a573b5641f43c74a25d1a996f7b61/modules/http4s/src/main/scala/natchez/http4s/NatchezMiddleware.scala#L183
+    trace_statements:
+      - context: span
+        statements:
+          - set(attributes["http.response.status_code"], Int(attributes["http.response.status_code"]))
   transform/replace-exclamation-with-colon:
     trace_statements:
       - context: span
