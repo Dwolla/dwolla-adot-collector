@@ -88,6 +88,7 @@ service:
         - batch/traces
         - attributes
         - transform/replace-exclamation-with-colon
+        - transform/status-code-is-int
         - linkextractor
         - transform/flatten-linked-trace-ids
       exporters:
