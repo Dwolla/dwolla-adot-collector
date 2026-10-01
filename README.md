@@ -23,6 +23,17 @@ The `linkextractor` processor solves this by:
 
 This allows Dwolla to maintain trace relationships and query for linked traces in X-Ray.
 
+## Metrics
+
+The collector exports OTLP metrics to the [Amazon CloudWatch OTLP metrics endpoint](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch-OTLPEndpoint.html)
+in the region named by the `AWS_REGION` environment variable, signed with SigV4. To export metrics:
+
+- set `AWS_REGION` and `DWOLLA_ENV` in the collector's environment. `DWOLLA_ENV` becomes the
+  `deployment.environment.name` resource attribute, unless the sending service already set one
+- grant the collector's IAM role `cloudwatch:PutMetricData`
+
+Metrics are queryable with PromQL in CloudWatch Query Studio.
+
 ## Local Development
 
 To build this image locally:

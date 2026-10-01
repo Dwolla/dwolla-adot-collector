@@ -1,6 +1,9 @@
 extensions:
   health_check:
     endpoint: 0.0.0.0:13133
+  sigv4auth:
+    service: monitoring
+    region: ${env:AWS_REGION}
 
 receivers:
   otlp:
@@ -65,6 +68,15 @@ processors:
       - context: span
         statements:
           - set(attributes["linked_trace_ids"], String(attributes["linked_trace_ids"]))
+  resource/metrics:
+    attributes:
+      - key: deployment.environment.name
+        value: ${env:DWOLLA_ENV}
+        action: insert
+  batch/metrics:
+    timeout: 10s
+    send_batch_size: 200
+    send_batch_max_size: 1000 # the CloudWatch OTLP endpoint accepts at most 1,000 data points per request
 
 exporters:
   awsxray:
@@ -79,6 +91,10 @@ exporters:
       - com.dwolla.enduser.account.id
       - com.dwolla.transaction.id
       - com.dwolla.event-bus.message-handling-result
+  otlphttp/cloudwatch:
+    metrics_endpoint: https://monitoring.${env:AWS_REGION}.amazonaws.com/v1/metrics
+    auth:
+      authenticator: sigv4auth
 
 service:
   pipelines:
@@ -97,6 +113,16 @@ service:
         - batch/traces
       exporters:
         - awsxray
+    metrics:
+      receivers:
+        - otlp
+      processors:
+        - memory_limiter
+        - resource/metrics
+        - batch/metrics
+      exporters:
+        - otlphttp/cloudwatch
 
   extensions:
     - health_check
+    - sigv4auth
