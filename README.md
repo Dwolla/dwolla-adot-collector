@@ -34,6 +34,12 @@ in the region named by the `AWS_REGION` environment variable, signed with SigV4.
 
 Metrics are queryable with PromQL in CloudWatch Query Studio.
 
+## Versioning
+
+- Image tags are this repository's release version (e.g. `dwolla/otel-collector:v0.47.0`). Images are pushed only when a `v*` release tag is created; builds of branches and pull requests are built but not pushed.
+- Up to v0.45.1, the version matched the upstream AWS Distro for OpenTelemetry (ADOT) collector release the image was based on, and images were tagged `<upstream version>-<commit>` (e.g. `v0.45.1-82a61a1`). Since v0.46.0 the image builds its own collector distribution, so its version is independent of upstream.
+- The upstream OpenTelemetry Collector component version is recorded in the `com.dwolla.otel-collector.upstream-version` image label, alongside the standard `org.opencontainers.image.version` label.
+
 ## Local Development
 
 To build this image locally:
