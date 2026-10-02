@@ -1,6 +1,9 @@
 extensions:
   health_check:
     endpoint: 0.0.0.0:13133
+  sigv4auth:
+    service: monitoring
+    region: ${env:AWS_REGION}
 
 receivers:
   otlp:
@@ -16,15 +19,16 @@ processors:
       limit_mib: 100
       check_interval: 5s
   batch/traces:
-    timeout: 10s
-    send_batch_size: 50
+    timeout: 5s
+    send_batch_size: 50 # spans (i.e. segments; X-Ray limits us to 50 segments per PutTraceSegments request)
+    send_batch_max_size: 50 # spans (i.e. segments; X-Ray limits us to 50 segments per PutTraceSegments request)
   attributes:
     actions:
       - key: deployment.environment.name
         value: ${env:DWOLLA_ENV}
         action: insert
 
-  # rename attributes to follow OTel semantic conventions
+      # rename attributes to follow OTel semantic conventions
       - key: url.full
         action: insert
         # from https://github.com/typelevel/natchez-http4s/blob/168f5031323a573b5641f43c74a25d1a996f7b61/modules/http4s/src/main/scala/natchez/http4s/NatchezMiddleware.scala#L176
@@ -41,7 +45,7 @@ processors:
         action: insert
         # from https://github.com/typelevel/natchez-http4s/blob/168f5031323a573b5641f43c74a25d1a996f7b61/modules/http4s/src/main/scala/natchez/http4s/NatchezMiddleware.scala#L58
         from_attribute: http.status_code
-  # remove the attributes we copied to complete the renaming
+      # remove the attributes we copied to complete the renaming
       - action: delete
         pattern: client\.http\.uri|client\.http\.method|(?:client\.)?http\.status_code
   transform/status-code-is-int:
@@ -64,9 +68,20 @@ processors:
       - context: span
         statements:
           - set(attributes["linked_trace_ids"], String(attributes["linked_trace_ids"]))
+  resource/metrics:
+    attributes:
+      - key: deployment.environment.name
+        value: ${env:DWOLLA_ENV}
+        action: insert
+  batch/metrics:
+    timeout: 10s
+    send_batch_size: 200
+    send_batch_max_size: 1000 # the CloudWatch OTLP endpoint accepts at most 1,000 data points per request
 
 exporters:
   awsxray:
+    max_retries: 8           # Increase from default 2
+    num_workers: 1           # limits burstiness in multi-collector fleet
     indexed_attributes: # see https://github.com/Dwolla/dwolla-otel-natchez/blob/dc1aa448d97a91f50ec52653b3e28d7fbf147f87/dwolla-xray-annotations/src/test/scala/com/dwolla/tracing/XRayAnnotationsSpec.scala#L27-L33
       - linked_trace_ids
       - deployment.environment.name
@@ -76,6 +91,10 @@ exporters:
       - com.dwolla.enduser.account.id
       - com.dwolla.transaction.id
       - com.dwolla.event-bus.message-handling-result
+  otlphttp/cloudwatch:
+    metrics_endpoint: https://monitoring.${env:AWS_REGION}.amazonaws.com/v1/metrics
+    auth:
+      authenticator: sigv4auth
 
 service:
   pipelines:
@@ -85,14 +104,25 @@ service:
         - zipkin
       processors:
         - memory_limiter
-        - batch/traces
         - attributes
         - transform/replace-exclamation-with-colon
         - transform/status-code-is-int
         - linkextractor
         - transform/flatten-linked-trace-ids
+        # when we start using groupbytrace/tail_sampling, they must happen before batching
+        - batch/traces
       exporters:
         - awsxray
+    metrics:
+      receivers:
+        - otlp
+      processors:
+        - memory_limiter
+        - resource/metrics
+        - batch/metrics
+      exporters:
+        - otlphttp/cloudwatch
 
   extensions:
     - health_check
+    - sigv4auth
