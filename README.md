@@ -34,6 +34,12 @@ in the region named by the `AWS_REGION` environment variable, signed with SigV4.
 
 Metrics are queryable with PromQL in CloudWatch Query Studio.
 
+The collector also exports its own metrics once a minute through the same pipeline, e.g.
+`otelcol_exporter_sent_spans` and `otelcol_exporter_send_failed_spans` (labeled by `exporter`),
+`otelcol_receiver_refused_spans`, and `otelcol_process_memory_rss`, with `service.name` `otelcol-custom`. Because
+every collector sends these, every collector's IAM role needs `cloudwatch:PutMetricData`, even where no application
+sends metrics; without it, the collector logs a failed metrics export every minute.
+
 ## Versioning
 
 - Image tags are this repository's release version (e.g. `dwolla/otel-collector:v0.47.0`). Images are pushed only when a `v*` release tag is created; builds of branches and pull requests are built but not pushed.

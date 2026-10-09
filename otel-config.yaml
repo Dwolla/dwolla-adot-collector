@@ -126,3 +126,15 @@ service:
   extensions:
     - health_check
     - sigv4auth
+
+  # Publish the collector's own metrics (e.g. otelcol_exporter_sent_spans, otelcol_exporter_send_failed_spans) by
+  # sending them to this collector's OTLP receiver, so they flow through the metrics pipeline like application metrics.
+  telemetry:
+    metrics:
+      readers:
+        - periodic:
+            interval: 60000 # milliseconds
+            exporter:
+              otlp:
+                protocol: grpc
+                endpoint: http://localhost:4317
