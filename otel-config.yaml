@@ -16,7 +16,11 @@ receivers:
 
 processors:
   memory_limiter:
-      limit_mib: 100
+      # Percentages of the container's memory limit (cgroup), so the limiter stays below whatever limit the container
+      # is deployed with; a fixed limit_mib above the container limit means the kernel kills the collector before the
+      # limiter can push back.
+      limit_percentage: 75
+      spike_limit_percentage: 20
       check_interval: 5s
   batch/traces:
     timeout: 5s
