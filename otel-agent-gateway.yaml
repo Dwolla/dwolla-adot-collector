@@ -66,7 +66,8 @@ processors:
         statements:
           - replace_pattern(attributes["peer.service"], "!", ":")
   probabilistic_sampler/interim:
-    # Interim cost cap until traces go through the tail-sampling gateway. Keeps whole traces: the decision is a hash of
+    # Interim cost cap. It stays until every collector a trace passes through (agents and batch sidecars) routes to
+    # gateways; then INTERIM_TRACE_SAMPLING_PERCENT is set to 100 everywhere in one window. Keeps whole traces: the decision is a hash of
     # the trace ID, so every collector with the same hash_seed and percentage keeps or drops the same traces. Keep this
     # block identical in every agent config, and never change hash_seed while any collector still samples.
     mode: hash_seed

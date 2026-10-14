@@ -73,11 +73,36 @@ CloudWatch as described above.
 | `TAIL_SAMPLING_BATCH_SERVICES_REGEX` | Gateways | The services treated as batch services |
 
 Gateways must set every `TAIL_SAMPLING_*` variable except the regex. An unset `TAIL_SAMPLING_SPANS_PER_SEC` resolves
-to 0, and the gateway then keeps nothing. An unset `*_PERCENT` keeps nothing from its own slice only; errors, slow
-traces, and flagged traces are still kept.
+to 0, and the gateway then keeps nothing. An unset `*_PERCENT` keeps nothing from its own slice.
 
 `TAIL_SAMPLING_BATCH_SERVICES_REGEX` defaults to matching no service. Anchor the value, as in `\A(svc-a|svc-b)\z`,
 because the collector matches it unanchored.
+
+Leave `INTERIM_TRACE_SAMPLING_PERCENT` and `TAIL_SAMPLING_BATCH_SERVICES_REGEX` unset, or set a real value; never set
+them empty. The collector applies a `${env:NAME:-default}` default only when `NAME` is absent. An empty
+`INTERIM_TRACE_SAMPLING_PERCENT=` becomes 0, so the agent drops every trace. An empty
+`TAIL_SAMPLING_BATCH_SERVICES_REGEX=` becomes an empty regex that matches every service, so the baseline slice keeps
+nothing.
+
+### What the gateway keeps
+
+Traces over 1000 spans are dropped first, errors included. Every other trace goes to the first slice that matches it,
+in this order, and that slice alone decides:
+
+| Slice | Matches | Share of `TAIL_SAMPLING_SPANS_PER_SEC` |
+|-------|---------|-----------------------------------------|
+| errors | any span with an error status | 21% |
+| slow | whole-trace duration of at least 5000 ms | 15% |
+| flagged | a span with the boolean attribute `com.dwolla.keep=true` | 7% |
+| api | `service.name` exactly `api` (a literal, not a regex), then kept at `TAIL_SAMPLING_API_PERCENT` | 11% |
+| batch-structural | a batch service whose root span has `com.dwolla.sampling.tier` = `structural`; kept whole | 4% |
+| batch | any other batch-service trace (`com.dwolla.sampling.tier` = `chunk`), kept at `TAIL_SAMPLING_BATCH_PERCENT` | 25% |
+| baseline | every non-batch service, kept at `TAIL_SAMPLING_BASELINE_PERCENT` | 17% |
+
+Each slice's span budget is its share times `TAIL_SAMPLING_SPANS_PER_SEC`, per second, per gateway instance. Errors,
+slow, and flagged traces are budgeted like the rest. A trace bigger than its slice's budget is never kept by that slice,
+and it does not fall through to a later one. At a cap of 600, for example, the flagged slice (7%) holds traces of up to
+42 spans and batch-structural (4%) up to 24.
 
 ### Interim sampling on the agents
 
@@ -87,9 +112,13 @@ collector with the same `hash_seed` and percentage keeps or drops the same trace
 - In `hash_seed` mode the interim sampler drops any span whose tracestate already carries an OpenTelemetry `rv` or `th`
   value (`fail_closed` defaults to true). Nothing in a typical setup writes those, but a service that adopts
   OpenTelemetry's consistent-probability samplers would lose its spans at the agent.
+- In `hash_seed` mode the sampler honors a span's `sampling.priority` attribute over the trace-ID hash, so a span that
+  sets it can be kept or dropped independently of its trace, which produces partial traces.
 - Every collector a trace passes through must use the same `hash_seed` and percentage, or traces get split. Never
   change `hash_seed`. Changing `INTERIM_TRACE_SAMPLING_PERCENT` splits traces for as long as old and new collectors
   both run, so change it in one window everywhere the traces flow.
+- The interim sampler is temporary. Once every agent and sidecar a trace passes through routes to gateways, set
+  `INTERIM_TRACE_SAMPLING_PERCENT=100` everywhere, in one window.
 
 ### Recording which policy kept a span
 
