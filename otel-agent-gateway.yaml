@@ -1,0 +1,152 @@
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+  sigv4auth:
+    service: monitoring
+    region: ${env:AWS_REGION}
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:55681
+  zipkin:
+
+processors:
+  memory_limiter:
+      # Percentages of the container's memory limit (cgroup), so the limiter stays below whatever limit the container
+      # is deployed with; a fixed limit_mib above the container limit means the kernel kills the collector before the
+      # limiter can push back.
+      limit_percentage: 75
+      spike_limit_percentage: 20
+      check_interval: 5s
+  batch/traces:
+    timeout: 5s
+    send_batch_size: 512
+    send_batch_max_size: 1024
+  attributes:
+    actions:
+      - key: deployment.environment.name
+        value: ${env:DWOLLA_ENV}
+        action: insert
+
+      # rename attributes to follow OTel semantic conventions
+      - key: url.full
+        action: insert
+        # from https://github.com/typelevel/natchez-http4s/blob/168f5031323a573b5641f43c74a25d1a996f7b61/modules/http4s/src/main/scala/natchez/http4s/NatchezMiddleware.scala#L176
+        from_attribute: client.http.uri
+      - key: http.request.method
+        action: insert
+        # from https://github.com/typelevel/natchez-http4s/blob/168f5031323a573b5641f43c74a25d1a996f7b61/modules/http4s/src/main/scala/natchez/http4s/NatchezMiddleware.scala#L177
+        from_attribute: client.http.method
+      - key: http.response.status_code
+        action: insert
+        # from https://github.com/typelevel/natchez-http4s/blob/168f5031323a573b5641f43c74a25d1a996f7b61/modules/http4s/src/main/scala/natchez/http4s/NatchezMiddleware.scala#L183
+        from_attribute: client.http.status_code
+      - key: http.response.status_code
+        action: insert
+        # from https://github.com/typelevel/natchez-http4s/blob/168f5031323a573b5641f43c74a25d1a996f7b61/modules/http4s/src/main/scala/natchez/http4s/NatchezMiddleware.scala#L58
+        from_attribute: http.status_code
+      # remove the attributes we copied to complete the renaming
+      - action: delete
+        pattern: client\.http\.uri|client\.http\.method|(?:client\.)?http\.status_code
+  transform/status-code-is-int:
+    # Natchez-http4s sets http.response.status_code as a string, but the OTel semantic
+    # conventions define it as an int, and X-Ray won't display it otherwise.
+    # see https://github.com/typelevel/natchez-http4s/blob/168f5031323a573b5641f43c74a25d1a996f7b61/modules/http4s/src/main/scala/natchez/http4s/NatchezMiddleware.scala#L183
+    trace_statements:
+      - context: span
+        statements:
+          - set(attributes["http.response.status_code"], Int(attributes["http.response.status_code"]))
+  transform/replace-exclamation-with-colon:
+    trace_statements:
+      - context: span
+        statements:
+          - replace_pattern(attributes["peer.service"], "!", ":")
+  probabilistic_sampler/interim:
+    # Interim cost cap until traces go through the tail-sampling gateway. Keeps whole traces: the decision is a hash of
+    # the trace ID, so every collector with the same hash_seed and percentage keeps or drops the same traces. Keep this
+    # block identical in every agent config, and never change hash_seed while any collector still samples.
+    mode: hash_seed
+    hash_seed: 22
+    sampling_percentage: ${env:INTERIM_TRACE_SAMPLING_PERCENT:-40}
+  resource/metrics:
+    attributes:
+      - key: deployment.environment.name
+        value: ${env:DWOLLA_ENV}
+        action: insert
+  batch/metrics:
+    timeout: 10s
+    send_batch_size: 200
+    send_batch_max_size: 1000 # the CloudWatch OTLP endpoint accepts at most 1,000 data points per request
+
+exporters:
+  loadbalancing:
+    routing_key: traceID
+    # Reroute data to the remaining gateways when one dies (off by default in the loadbalancing exporter).
+    retry_on_failure:
+      enabled: true
+    sending_queue:
+      enabled: true
+      num_consumers: 10 # the exporter rejects a configured queue without explicit consumers
+      queue_size: 1000
+    resolver:
+      dns:
+        hostname: gateway.otel.internal
+        port: "4317"
+        interval: 5s
+    protocol:
+      otlp:
+        tls:
+          insecure: true # plaintext inside the VPC, like application → agent
+        retry_on_failure:
+          enabled: true
+          max_elapsed_time: 30s
+  otlphttp/cloudwatch:
+    metrics_endpoint: https://monitoring.${env:AWS_REGION}.amazonaws.com/v1/metrics
+    auth:
+      authenticator: sigv4auth
+
+service:
+  pipelines:
+    traces:
+      receivers:
+        - otlp
+        - zipkin
+      processors:
+        - memory_limiter
+        - attributes
+        - transform/replace-exclamation-with-colon
+        - transform/status-code-is-int
+        - probabilistic_sampler/interim
+        # tail sampling happens in the gateway; every span of a trace is routed to the same gateway by trace ID
+        - batch/traces
+      exporters:
+        - loadbalancing
+    metrics:
+      receivers:
+        - otlp
+      processors:
+        - memory_limiter
+        - resource/metrics
+        - batch/metrics
+      exporters:
+        - otlphttp/cloudwatch
+
+  extensions:
+    - health_check
+    - sigv4auth
+
+  # Publish the collector's own metrics (e.g. otelcol_exporter_sent_spans, otelcol_exporter_send_failed_spans) by
+  # sending them to this collector's OTLP receiver, so they flow through the metrics pipeline like application metrics.
+  telemetry:
+    metrics:
+      readers:
+        - periodic:
+            interval: 60000 # milliseconds
+            exporter:
+              otlp:
+                protocol: grpc
+                endpoint: http://localhost:4317
