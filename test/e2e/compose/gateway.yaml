@@ -1,0 +1,28 @@
+services:
+  gateway:
+    image: ${OTELCOL_IMAGE:-dwolla/otel-collector:latest}
+    command:
+      - --config=/etc/otel-gateway.yaml
+      - --config=/fixtures/fast-self-metrics.yaml
+      - --set=exporters.otlphttp/xray.traces_endpoint=http://sink:4318/v1/traces
+      - --set=exporters.otlphttp/cloudwatch.metrics_endpoint=http://sink:4318/v1/metrics
+      - --feature-gates=processor.tailsamplingprocessor.recordpolicy
+    environment:
+      - AWS_REGION=us-west-2
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - DWOLLA_ENV=Test
+      - TAIL_SAMPLING_SPANS_PER_SEC
+      - TAIL_SAMPLING_BASELINE_PERCENT
+      - TAIL_SAMPLING_API_PERCENT
+      - TAIL_SAMPLING_NEW_TRACES_PER_SEC
+      - TAIL_SAMPLING_BATCH_PERCENT
+      - TAIL_SAMPLING_BATCH_SERVICES_REGEX
+    volumes: ["../fixtures:/fixtures:ro"]
+    ports: ["127.0.0.1::4318"]
+    depends_on: [sink]
+  sink:
+    image: ${OTELCOL_IMAGE:-dwolla/otel-collector:latest}
+    command: [--config=/fixtures/sink.yaml]
+    environment: [SINK_NAME=sink]
+    volumes: ["../fixtures:/fixtures:ro", "${E2E_OUT}:/out"]
