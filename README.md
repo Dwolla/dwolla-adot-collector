@@ -86,8 +86,10 @@ nothing.
 
 ### What the gateway keeps
 
-Traces over 1000 spans are dropped first, errors included. Every other trace goes to the first slice that matches it,
-in this order, and that slice alone decides:
+Traces over 1000 spans are dropped first, errors included. Every other trace is checked against the slices in this
+order. The first slice whose rule keeps the trace decides: for the api, batch, and baseline slices that rule includes the
+percentage draw, so a trace that loses the draw moves on to the next slice. If the deciding slice is over its budget, the
+trace is dropped, not passed on:
 
 | Slice | Matches | Share of `TAIL_SAMPLING_SPANS_PER_SEC` |
 |-------|---------|-----------------------------------------|
@@ -101,7 +103,7 @@ in this order, and that slice alone decides:
 
 Each slice's span budget is its share times `TAIL_SAMPLING_SPANS_PER_SEC`, per second, per gateway instance. Errors,
 slow, and flagged traces are budgeted like the rest. A trace bigger than its slice's budget is never kept by that slice,
-and it does not fall through to a later one. At a cap of 600, for example, the flagged slice (7%) holds traces of up to
+and it is not passed on to a later one. At a cap of 600, for example, the flagged slice (7%) holds traces of up to
 42 spans and batch-structural (4%) up to 24.
 
 ### Interim sampling on the agents
