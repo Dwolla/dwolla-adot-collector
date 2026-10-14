@@ -39,6 +39,7 @@ COPY --chown=nonroot:nonroot otel-agent-gateway.yaml /etc/otel-agent-gateway.yam
 COPY --chown=nonroot:nonroot tail-sampling.yaml /etc/tail-sampling.yaml
 COPY --chown=nonroot:nonroot otel-gateway.yaml /etc/otel-gateway.yaml
 COPY --chown=nonroot:nonroot otel-gateway-xray.yaml /etc/otel-gateway-xray.yaml
+
 HEALTHCHECK \
   --interval=30s \
   --timeout=5s \

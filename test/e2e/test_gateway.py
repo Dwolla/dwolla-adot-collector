@@ -54,7 +54,9 @@ def crafted(seed):
 
 def test_decisions_with_baseline_off(e2e_out):
     t = crafted(seed=20)
-    sink = run_gateway(e2e_out, list(t.values()), TAIL_SAMPLING_BASELINE_PERCENT="0")
+    # With a 10000 cap the errors slice (2100 spans) fits the 1001-span error trace, so only drop-oversized rejects it.
+    sink = run_gateway(e2e_out, list(t.values()), TAIL_SAMPLING_BASELINE_PERCENT="0",
+                       TAIL_SAMPLING_SPANS_PER_SEC="10000")
     kept = sink.spans_by_trace()
     for name in ("error", "slow", "flagged", "structural"):
         assert t[name].trace_id in kept, name
