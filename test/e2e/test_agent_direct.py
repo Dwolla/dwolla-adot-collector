@@ -50,6 +50,22 @@ def test_percent_100_keeps_every_trace(fake_xray):
     assert len(kept) == 300
 
 
+BATCH_KEYS = {
+    "com.dwolla.batch.job.name": "foo-job",
+    "com.dwolla.batch.job.run.id": "run-1",
+    "com.dwolla.batch.partition.id": "p-7",
+    "com.dwolla.batch.unit.index": 3,
+}
+
+
+def test_batch_keys_become_annotations(fake_xray):
+    trace = TraceBuilder(seed=5).trace(spans=1, root_attrs=BATCH_KEYS)
+    kept = run_direct(fake_xray, [trace], env={"INTERIM_TRACE_SAMPLING_PERCENT": "100"})
+    annotations = kept[trace.trace_id][0].get("annotations", {})
+    for key, value in BATCH_KEYS.items():
+        assert annotations.get(key) == value, (key, annotations)
+
+
 def test_two_agents_agree_on_every_trace(fake_xray):
     """Roots go to one agent and children to another (a trace crossing tiers); each trace is kept whole or not at all."""
     builder = TraceBuilder(seed=4)
