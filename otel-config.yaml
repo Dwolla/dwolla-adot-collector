@@ -157,6 +157,10 @@ exporters:
       - com.dwolla.enduser.account.id
       - com.dwolla.transaction.id
       - com.dwolla.event-bus.message-handling-result
+      - com.dwolla.batch.job.name
+      - com.dwolla.batch.job.run.id
+      - com.dwolla.batch.partition.id
+      - com.dwolla.batch.unit.index
   otlphttp/cloudwatch:
     metrics_endpoint: https://monitoring.${env:AWS_REGION}.amazonaws.com/v1/metrics
     auth:
