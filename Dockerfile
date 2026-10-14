@@ -35,6 +35,7 @@ COPY --from=builder --chown=nonroot:nonroot /build/dist/healthcheck /healthcheck
 EXPOSE 4317 4318 13133
 
 COPY --chown=nonroot:nonroot otel-config.yaml /etc/otel-config.yaml
+COPY --chown=nonroot:nonroot otel-agent-gateway.yaml /etc/otel-agent-gateway.yaml
 
 HEALTHCHECK \
   --interval=30s \
