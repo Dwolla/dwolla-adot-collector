@@ -33,3 +33,32 @@ def test_forwards_every_span_with_the_environment_annotation(fake_xray):
     for docs in kept.values():
         assert len(docs) == 3
         assert all(d.get("annotations", {}).get("deployment.environment.name") == "Test" for d in docs)
+
+
+def test_default_keeps_about_40_percent_of_traces_and_whole_traces_only(fake_xray):
+    builder = TraceBuilder(seed=2)
+    traces = [builder.trace(spans=3) for _ in range(1000)]
+    kept = run_direct(fake_xray, traces)
+    assert 350 <= len(kept) <= 450, len(kept)
+    assert all(len(docs) == 3 for docs in kept.values())
+
+
+def test_percent_100_keeps_every_trace(fake_xray):
+    builder = TraceBuilder(seed=3)
+    traces = [builder.trace(spans=3) for _ in range(300)]
+    kept = run_direct(fake_xray, traces, env={"INTERIM_TRACE_SAMPLING_PERCENT": "100"})
+    assert len(kept) == 300
+
+
+def test_two_agents_agree_on_every_trace(fake_xray):
+    """Roots go to one agent and children to another (a trace crossing tiers); each trace is kept whole or not at all."""
+    builder = TraceBuilder(seed=4)
+    traces = [builder.trace(spans=3) for _ in range(500)]
+
+    def split(compose):
+        send_traces(compose.port("agent-a", 55681), traces, spans_of=lambda t: t.spans[:1])
+        send_traces(compose.port("agent-b", 55681), traces, spans_of=lambda t: t.spans[1:])
+
+    kept = run_direct(fake_xray, traces, send=split)
+    assert 150 <= len(kept) <= 250, len(kept)
+    assert all(len(docs) == 3 for docs in kept.values())

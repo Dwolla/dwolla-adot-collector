@@ -11,6 +11,8 @@ services:
       - AWS_ACCESS_KEY_ID=test
       - AWS_SECRET_ACCESS_KEY=test
       - DWOLLA_ENV=Test
+      # Keep every trace: the test expects a size-triggered batch send, which the interim sampler's 40% default would starve.
+      - INTERIM_TRACE_SAMPLING_PERCENT=100
     extra_hosts:
       - host.docker.internal:host-gateway
     ports:

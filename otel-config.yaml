@@ -80,6 +80,13 @@ processors:
       - context: span
         statements:
           - set(attributes["linked_trace_ids"], String(attributes["linked_trace_ids"]))
+  probabilistic_sampler/interim:
+    # Interim cost cap until traces go through the tail-sampling gateway. Keeps whole traces: the decision is a hash of
+    # the trace ID, so every collector with the same hash_seed and percentage keeps or drops the same traces. Keep this
+    # block identical in every agent config, and never change hash_seed while any collector still samples.
+    mode: hash_seed
+    hash_seed: 22
+    sampling_percentage: ${env:INTERIM_TRACE_SAMPLING_PERCENT:-40}
   resource/metrics:
     attributes:
       - key: deployment.environment.name
@@ -130,6 +137,7 @@ processors:
           - set(unit, "{combinations}") where name == "otelcol_processor_batch_metadata_cardinality"
           - set(unit, "{times}") where IsMatch(name, "^otelcol_processor_batch_(batch_size|timeout)_trigger_send$")
           - set(unit, "{items}") where IsMatch(name, "^otelcol_processor_(incoming|outgoing)_items$")
+          - set(unit, "1") where name == "otelcol_processor_probabilistic_sampler_count_traces_sampled"
           - convert_gauge_to_sum("cumulative", false) where name == "otelcol_processor_batch_metadata_cardinality"
   batch/metrics:
     timeout: 10s
@@ -168,6 +176,7 @@ service:
         - linkextractor
         - transform/flatten-linked-trace-ids
         # when we start using groupbytrace/tail_sampling, they must happen before batching
+        - probabilistic_sampler/interim
         - batch/traces
       exporters:
         - awsxray
