@@ -93,7 +93,7 @@ exporters:
   awsxray:
     max_retries: 8           # Increase from default 2
     num_workers: 1           # limits burstiness in multi-collector fleet
-    indexed_attributes: # see https://github.com/Dwolla/dwolla-otel-natchez/blob/dc1aa448d97a91f50ec52653b3e28d7fbf147f87/dwolla-xray-annotations/src/test/scala/com/dwolla/tracing/XRayAnnotationsSpec.scala#L27-L33
+    indexed_attributes: # see https://github.com/Dwolla/dwolla-otel-natchez/blob/18be56bf5d4689700506211fbd01c128875012f1/dwolla-xray-annotations/src/test/scala/com/dwolla/tracing/XRayAnnotationsSpec.scala#L63-L69
       - linked_trace_ids
       - deployment.environment.name
       - otel.resource.deployment.environment.name
