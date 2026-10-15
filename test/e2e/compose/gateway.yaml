@@ -18,11 +18,18 @@ services:
       - TAIL_SAMPLING_NEW_TRACES_PER_SEC
       - TAIL_SAMPLING_BATCH_PERCENT
       - TAIL_SAMPLING_BATCH_SERVICES_REGEX
-    volumes: ["../fixtures:/fixtures:ro"]
-    ports: ["127.0.0.1::4318"]
-    depends_on: [sink]
+    volumes:
+      - "../fixtures:/fixtures:ro"
+    ports:
+      - "127.0.0.1::4318"
+    depends_on:
+      - sink
   sink:
     image: ${OTELCOL_IMAGE:-dwolla/otel-collector:latest}
-    command: [--config=/fixtures/sink.yaml]
-    environment: [SINK_NAME=sink]
-    volumes: ["../fixtures:/fixtures:ro", "${E2E_OUT}:/out"]
+    command:
+      - --config=/fixtures/sink.yaml
+    environment:
+      - SINK_NAME=sink
+    volumes:
+      - "../fixtures:/fixtures:ro"
+      - "${E2E_OUT}:/out"
