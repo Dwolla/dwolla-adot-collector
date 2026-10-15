@@ -16,5 +16,7 @@ services:
       - TAIL_SAMPLING_NEW_TRACES_PER_SEC=100
       - TAIL_SAMPLING_BATCH_PERCENT=0
       - TAIL_SAMPLING_BATCH_SERVICES_REGEX=\Afoo-batch\z
-    extra_hosts: ["host.docker.internal:host-gateway"]
-    ports: ["127.0.0.1::4318"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1::4318"

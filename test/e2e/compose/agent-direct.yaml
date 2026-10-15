@@ -13,8 +13,10 @@ x-agent: &agent
     # A bare name forwards the variable only when it's set, so an unset one reaches the collector as unset and
     # ${env:INTERIM_TRACE_SAMPLING_PERCENT:-40} applies. (An empty string would not trigger the default.)
     - INTERIM_TRACE_SAMPLING_PERCENT
-  extra_hosts: ["host.docker.internal:host-gateway"]
-  ports: ["127.0.0.1::55681"]
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+  ports:
+    - "127.0.0.1::55681"
 services:
   agent-a: *agent
   agent-b: *agent

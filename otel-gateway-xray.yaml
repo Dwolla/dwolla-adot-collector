@@ -68,14 +68,28 @@ exporters:
 service:
   pipelines:
     traces:
-      receivers: [otlp]
-      processors: [memory_limiter, tail_sampling, linkextractor, transform/flatten-linked-trace-ids, batch/traces]
-      exporters: [awsxray]
+      receivers:
+        - otlp
+      processors:
+        - memory_limiter
+        - tail_sampling
+        - linkextractor
+        - transform/flatten-linked-trace-ids
+        - batch/traces
+      exporters:
+        - awsxray
     metrics:
-      receivers: [otlp]
-      processors: [memory_limiter, resource/metrics, batch/metrics]
-      exporters: [otlphttp/cloudwatch]
-  extensions: [health_check, sigv4auth]
+      receivers:
+        - otlp
+      processors:
+        - memory_limiter
+        - resource/metrics
+        - batch/metrics
+      exporters:
+        - otlphttp/cloudwatch
+  extensions:
+    - health_check
+    - sigv4auth
   telemetry:
     resource:
       com.dwolla.otel.collector.role: gateway

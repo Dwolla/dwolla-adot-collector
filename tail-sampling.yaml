@@ -14,7 +14,8 @@ policies:
       drop_sub_policy:
         - name: over-1000-spans
           type: span_count
-          span_count: {min_spans: 1001}
+          span_count:
+            min_spans: 1001
   - name: keep
     type: composite
     composite:
@@ -22,24 +23,39 @@ policies:
       # an unset *_PERCENT keeps nothing from its own slice; TAIL_SAMPLING_NEW_TRACES_PER_SEC is only a sizing hint.
       # A value that is set but empty skips the default, so TAIL_SAMPLING_BATCH_SERVICES_REGEX must be unset or real.
       max_total_spans_per_second: ${env:TAIL_SAMPLING_SPANS_PER_SEC}
-      policy_order: [errors, slow, flagged, api, batch-structural, batch, baseline]
+      policy_order:
+        - errors
+        - slow
+        - flagged
+        - api
+        - batch-structural
+        - batch
+        - baseline
       composite_sub_policy:
         - name: errors
           type: status_code
-          status_code: {status_codes: [ERROR]}
+          status_code:
+            status_codes:
+              - ERROR
         - name: slow
           type: latency
-          latency: {threshold_ms: 5000}
+          latency:
+            threshold_ms: 5000
         - name: flagged
           type: boolean_attribute
-          boolean_attribute: {key: com.dwolla.keep, value: true}
+          boolean_attribute:
+            key: com.dwolla.keep
+            value: true
         - name: api
           type: and
           and:
             and_sub_policy:
               - name: api-service
                 type: string_attribute
-                string_attribute: {key: service.name, values: [api]}
+                string_attribute:
+                  key: service.name
+                  values:
+                    - api
               - name: api-share
                 type: probabilistic
                 probabilistic:
@@ -56,11 +72,15 @@ policies:
                 type: string_attribute
                 string_attribute:
                   key: service.name
-                  values: ['${env:TAIL_SAMPLING_BATCH_SERVICES_REGEX:-\A\z}']
+                  values:
+                    - '${env:TAIL_SAMPLING_BATCH_SERVICES_REGEX:-\A\z}'
                   enabled_regex_matching: true
               - name: tier-structural
                 type: string_attribute
-                string_attribute: {key: com.dwolla.sampling.tier, values: [structural]}
+                string_attribute:
+                  key: com.dwolla.sampling.tier
+                  values:
+                    - structural
         - name: batch
           type: and
           and:
@@ -69,7 +89,8 @@ policies:
                 type: string_attribute
                 string_attribute:
                   key: service.name
-                  values: ['${env:TAIL_SAMPLING_BATCH_SERVICES_REGEX:-\A\z}']
+                  values:
+                    - '${env:TAIL_SAMPLING_BATCH_SERVICES_REGEX:-\A\z}'
                   enabled_regex_matching: true
               - name: batch-share
                 type: probabilistic
@@ -83,7 +104,8 @@ policies:
                 type: string_attribute
                 string_attribute:
                   key: service.name
-                  values: ['${env:TAIL_SAMPLING_BATCH_SERVICES_REGEX:-\A\z}']
+                  values:
+                    - '${env:TAIL_SAMPLING_BATCH_SERVICES_REGEX:-\A\z}'
                   enabled_regex_matching: true
                   invert_match: true
               - name: baseline-share
