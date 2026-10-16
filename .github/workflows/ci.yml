@@ -53,7 +53,9 @@ jobs:
       - name: Canonical check (build, validate, end-to-end)
         run: make check
   build-complete:
-    needs: [build, e2e]
+    needs:
+      - build
+      - e2e
     runs-on: ubuntu-latest
     steps:
       - run: echo "The build completed successfully"

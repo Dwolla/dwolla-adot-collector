@@ -1,0 +1,103 @@
+# Fallback gateway: the same tail sampling, exported through awsxray (classic X-Ray). Use it only if Transaction Search
+# is turned off: the OTLP endpoint rejects traces then.
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+  sigv4auth:
+    service: monitoring
+    region: ${env:AWS_REGION}
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    # Percentages of the container's memory limit (cgroup); see otel-config.yaml.
+    limit_percentage: 75
+    spike_limit_percentage: 20
+    check_interval: 5s
+  tail_sampling: ${file:/etc/tail-sampling.yaml}
+  linkextractor:
+    attribute_name: "linked_trace_ids"
+  transform/flatten-linked-trace-ids:
+    trace_statements:
+      - context: span
+        statements:
+          - set(attributes["linked_trace_ids"], String(attributes["linked_trace_ids"]))
+  batch/traces:
+    timeout: 5s
+    send_batch_size: 50 # spans (i.e. segments; X-Ray limits us to 50 segments per PutTraceSegments request)
+    send_batch_max_size: 50 # spans (i.e. segments; X-Ray limits us to 50 segments per PutTraceSegments request)
+  resource/metrics:
+    attributes:
+      - key: deployment.environment.name
+        value: ${env:DWOLLA_ENV}
+        action: insert
+  batch/metrics:
+    timeout: 10s
+    send_batch_size: 200
+    send_batch_max_size: 1000 # the CloudWatch OTLP endpoint accepts at most 1,000 data points per request
+
+exporters:
+  awsxray:
+    max_retries: 8           # Increase from default 2
+    num_workers: 1           # limits burstiness in multi-collector fleet
+    indexed_attributes: # see https://github.com/Dwolla/dwolla-otel-natchez/blob/18be56bf5d4689700506211fbd01c128875012f1/dwolla-xray-annotations/src/test/scala/com/dwolla/tracing/XRayAnnotationsSpec.scala#L63-L69
+      - linked_trace_ids
+      - deployment.environment.name
+      - otel.resource.deployment.environment.name
+      - otel.resource.service.name
+      - com.dwolla.client.account.id
+      - com.dwolla.enduser.account.id
+      - com.dwolla.transaction.id
+      - com.dwolla.event-bus.message-handling-result
+      - com.dwolla.batch.job.name
+      - com.dwolla.batch.job.run.id
+      - com.dwolla.batch.partition.id
+      - com.dwolla.batch.unit.index
+  otlphttp/cloudwatch:
+    metrics_endpoint: https://monitoring.${env:AWS_REGION}.amazonaws.com/v1/metrics
+    auth:
+      authenticator: sigv4auth
+
+service:
+  pipelines:
+    traces:
+      receivers:
+        - otlp
+      processors:
+        - memory_limiter
+        - tail_sampling
+        - linkextractor
+        - transform/flatten-linked-trace-ids
+        - batch/traces
+      exporters:
+        - awsxray
+    metrics:
+      receivers:
+        - otlp
+      processors:
+        - memory_limiter
+        - resource/metrics
+        - batch/metrics
+      exporters:
+        - otlphttp/cloudwatch
+  extensions:
+    - health_check
+    - sigv4auth
+  telemetry:
+    resource:
+      com.dwolla.otel.collector.role: gateway
+    metrics:
+      readers:
+        - periodic:
+            interval: 60000 # milliseconds
+            exporter:
+              otlp:
+                protocol: grpc
+                endpoint: http://localhost:4317

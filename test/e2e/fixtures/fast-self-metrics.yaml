@@ -1,0 +1,10 @@
+service:
+  telemetry:
+    metrics:
+      readers:
+        - periodic:
+            interval: 2000
+            exporter:
+              otlp:
+                protocol: grpc
+                endpoint: http://localhost:4317

@@ -1,0 +1,51 @@
+x-otelcol: &otelcol
+  image: ${OTELCOL_IMAGE:-dwolla/otel-collector:latest}
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+x-env: &env
+  - AWS_REGION=us-west-2
+  - AWS_ACCESS_KEY_ID=test
+  - AWS_SECRET_ACCESS_KEY=test
+  - DWOLLA_ENV=Test
+  - INTERIM_TRACE_SAMPLING_PERCENT
+x-sink: &sink
+  <<: *otelcol
+  command:
+    - --config=/fixtures/sink.yaml
+  volumes:
+    - "../fixtures:/fixtures:ro"
+    - "${E2E_OUT}:/out"
+services:
+  agent:
+    <<: *otelcol
+    command:
+      - --config=/etc/otel-agent-gateway.yaml
+      - --set=exporters.otlphttp/cloudwatch.metrics_endpoint=http://host.docker.internal:${FAKE_XRAY_PORT}/v1/metrics
+    environment: *env
+    ports:
+      - "127.0.0.1::55681"
+  agent-direct:
+    <<: *otelcol
+    command:
+      - --config=/etc/otel-config.yaml
+      - --set=exporters.awsxray.endpoint=http://host.docker.internal:${FAKE_XRAY_PORT}
+      - --set=exporters.otlphttp/cloudwatch.metrics_endpoint=http://host.docker.internal:${FAKE_XRAY_PORT}/v1/metrics
+    environment: *env
+    ports:
+      - "127.0.0.1::55681"
+  gw-1:
+    <<: *sink
+    environment:
+      - SINK_NAME=gw-1
+    networks:
+      default:
+        aliases:
+          - gateway.otel.internal
+  gw-2:
+    <<: *sink
+    environment:
+      - SINK_NAME=gw-2
+    networks:
+      default:
+        aliases:
+          - gateway.otel.internal

@@ -1,0 +1,87 @@
+# Gateway: receives every span of a trace from the agents (routed by trace ID), decides with tail sampling, and sends
+# what it keeps to the X-Ray OTLP endpoint (CloudWatch Transaction Search).
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+  sigv4auth:
+    service: monitoring
+    region: ${env:AWS_REGION}
+  sigv4auth/xray:
+    # one sigv4auth instance signs for one service
+    service: xray
+    region: ${env:AWS_REGION}
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    # Percentages of the container's memory limit (cgroup); see otel-config.yaml.
+    limit_percentage: 75
+    spike_limit_percentage: 20
+    check_interval: 5s
+  tail_sampling: ${file:/etc/tail-sampling.yaml}
+  batch/traces:
+    timeout: 5s
+    send_batch_size: 512
+    send_batch_max_size: 1024
+  resource/metrics:
+    attributes:
+      - key: deployment.environment.name
+        value: ${env:DWOLLA_ENV}
+        action: insert
+  batch/metrics:
+    timeout: 10s
+    send_batch_size: 200
+    send_batch_max_size: 1000 # the CloudWatch OTLP endpoint accepts at most 1,000 data points per request
+
+exporters:
+  otlphttp/xray:
+    traces_endpoint: https://xray.${env:AWS_REGION}.amazonaws.com/v1/traces
+    auth:
+      authenticator: sigv4auth/xray
+  otlphttp/cloudwatch:
+    metrics_endpoint: https://monitoring.${env:AWS_REGION}.amazonaws.com/v1/metrics
+    auth:
+      authenticator: sigv4auth
+
+service:
+  pipelines:
+    traces:
+      receivers:
+        - otlp
+      processors:
+        - memory_limiter
+        - tail_sampling
+        - batch/traces
+      exporters:
+        - otlphttp/xray
+    metrics:
+      receivers:
+        - otlp
+      processors:
+        - memory_limiter
+        - resource/metrics
+        - batch/metrics
+      exporters:
+        - otlphttp/cloudwatch
+  extensions:
+    - health_check
+    - sigv4auth
+    - sigv4auth/xray
+  telemetry:
+    resource:
+      com.dwolla.otel.collector.role: gateway
+    metrics:
+      readers:
+        - periodic:
+            interval: 60000 # milliseconds
+            exporter:
+              otlp:
+                protocol: grpc
+                endpoint: http://localhost:4317
