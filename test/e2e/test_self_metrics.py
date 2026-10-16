@@ -111,6 +111,14 @@ def test_self_metrics_keep_their_contract(e2e_out, fake_xray):
     assert contract == json.loads(CONTRACT_FIXTURE.read_text())
 
 
+def test_self_metrics_all_have_units(e2e_out, fake_xray):
+    compose, sink = run_agent_until_exported(e2e_out, fake_xray)
+    with compose:
+        contract = self_metric_contract(sink.metrics())
+    without_unit = sorted(name for name, metric in contract["metrics"].items() if not metric["unit"])
+    assert not without_unit, f"self-metrics reached the sink without a unit; extend transform/self-metrics: {without_unit}"
+
+
 def test_default_config_exits_cleanly_when_stopped(e2e_out, fake_xray):
     compose, _ = run_agent_until_exported(e2e_out, fake_xray)
     with compose:
@@ -142,9 +150,12 @@ def test_application_metrics_still_flow(e2e_out, fake_xray):
         sink = Sink(e2e_out, "sink")
 
         def reached_sink():
-            return any(
-                m["name"] == "e2e_application_gauge"
-                for rm in sink.metrics() for sm in rm.get("scopeMetrics", []) for m in sm.get("metrics", []))
+            try:
+                return any(
+                    m["name"] == "e2e_application_gauge"
+                    for rm in sink.metrics() for sm in rm.get("scopeMetrics", []) for m in sm.get("metrics", []))
+            except json.JSONDecodeError:
+                return False  # the sink was mid-write; the next poll sees the whole line
 
         wait_until(reached_sink, timeout_s=30)
         resource = next(rm["resource"] for rm in sink.metrics() for sm in rm.get("scopeMetrics", [])
