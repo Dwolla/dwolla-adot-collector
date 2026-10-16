@@ -150,12 +150,9 @@ def test_application_metrics_still_flow(e2e_out, fake_xray):
         sink = Sink(e2e_out, "sink")
 
         def reached_sink():
-            try:
-                return any(
-                    m["name"] == "e2e_application_gauge"
-                    for rm in sink.metrics() for sm in rm.get("scopeMetrics", []) for m in sm.get("metrics", []))
-            except json.JSONDecodeError:
-                return False  # the sink was mid-write; the next poll sees the whole line
+            return any(
+                m["name"] == "e2e_application_gauge"
+                for rm in sink.metrics() for sm in rm.get("scopeMetrics", []) for m in sm.get("metrics", []))
 
         wait_until(reached_sink, timeout_s=30)
         resource = next(rm["resource"] for rm in sink.metrics() for sm in rm.get("scopeMetrics", [])

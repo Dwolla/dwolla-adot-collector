@@ -136,7 +136,10 @@ class Sink:
     def _lines(path):
         if not path.exists():
             return []
-        return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+        text = path.read_text()
+        # The file exporter may be mid-write: only lines it has finished (terminated by "\n") are complete JSON.
+        complete = text[: text.rfind("\n") + 1]
+        return [json.loads(line) for line in complete.splitlines() if line.strip()]
 
     def spans_by_trace(self):
         by_trace = {}
