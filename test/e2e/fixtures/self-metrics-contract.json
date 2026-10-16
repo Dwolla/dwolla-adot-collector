@@ -1,0 +1,85 @@
+{
+  "metrics": {
+    "otelcol_exporter_queue_capacity": {
+      "aggregationTemporality": null,
+      "dataPointAttributeKeys": [
+        "data_type",
+        "exporter"
+      ],
+      "isMonotonic": null,
+      "type": "gauge",
+      "unit": "{batches}"
+    },
+    "otelcol_exporter_queue_size": {
+      "aggregationTemporality": null,
+      "dataPointAttributeKeys": [
+        "data_type",
+        "exporter"
+      ],
+      "isMonotonic": null,
+      "type": "gauge",
+      "unit": "{batches}"
+    },
+    "otelcol_process_cpu_seconds": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [],
+      "isMonotonic": true,
+      "type": "sum",
+      "unit": "s"
+    },
+    "otelcol_process_memory_rss": {
+      "aggregationTemporality": null,
+      "dataPointAttributeKeys": [],
+      "isMonotonic": null,
+      "type": "gauge",
+      "unit": "By"
+    },
+    "otelcol_process_runtime_heap_alloc_bytes": {
+      "aggregationTemporality": null,
+      "dataPointAttributeKeys": [],
+      "isMonotonic": null,
+      "type": "gauge",
+      "unit": "By"
+    },
+    "otelcol_process_runtime_total_alloc_bytes": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [],
+      "isMonotonic": true,
+      "type": "sum",
+      "unit": "By"
+    },
+    "otelcol_process_runtime_total_sys_memory_bytes": {
+      "aggregationTemporality": null,
+      "dataPointAttributeKeys": [],
+      "isMonotonic": null,
+      "type": "gauge",
+      "unit": "By"
+    },
+    "otelcol_process_uptime": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [],
+      "isMonotonic": true,
+      "type": "sum",
+      "unit": "s"
+    },
+    "otelcol_processor_batch_metadata_cardinality": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [
+        "processor"
+      ],
+      "isMonotonic": null,
+      "type": "sum",
+      "unit": "{combinations}"
+    }
+  },
+  "resourceAttributeKeys": [
+    "deployment.environment.name",
+    "service.instance.id",
+    "service.name",
+    "service.version"
+  ],
+  "resourceAttributeValues": {
+    "deployment.environment.name": "Test",
+    "service.name": "otelcol-custom"
+  }
+}

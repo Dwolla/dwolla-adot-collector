@@ -55,6 +55,9 @@ class Compose:
                 return state.get("ExitCode")
         return None
 
+    def stop(self, service, timeout_s=30):
+        self._run("stop", "-t", str(timeout_s), service)
+
     def down(self):
         self._run("down", "-v", check=False)
 

@@ -1,0 +1,25 @@
+# The default agent config with its self-metrics (and application metrics) exported to a sink instead of CloudWatch.
+services:
+  agent:
+    image: ${OTELCOL_IMAGE:-dwolla/otel-collector:latest}
+    command:
+      - --config=/etc/otel-config.yaml
+      # No traces are sent, so this endpoint is never used.
+      - --set=exporters.awsxray.endpoint=http://sink:4318
+      - --set=exporters.otlphttp/cloudwatch.metrics_endpoint=http://sink:4318/v1/metrics
+    environment:
+      - AWS_REGION=us-west-2
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - DWOLLA_ENV=Test
+    depends_on:
+      - sink
+  sink:
+    image: ${OTELCOL_IMAGE:-dwolla/otel-collector:latest}
+    command:
+      - --config=/fixtures/sink.yaml
+    environment:
+      - SINK_NAME=sink
+    volumes:
+      - ../fixtures:/fixtures:ro
+      - ${E2E_OUT}:/out
