@@ -34,7 +34,8 @@ in the region named by the `AWS_REGION` environment variable, signed with SigV4.
 
 Metrics are queryable with PromQL in CloudWatch Query Studio.
 
-The collector also exports its own metrics once a minute through the same pipeline, e.g.
+The collector also publishes its own metrics on a localhost-only Prometheus endpoint (127.0.0.1:18888) and scrapes them
+every 60 s into the same export path (a pull rather than a push, so stopping the collector exits cleanly), e.g.
 `otelcol_exporter_sent_spans` and `otelcol_exporter_send_failed_spans` (labeled by `exporter`),
 `otelcol_receiver_refused_spans`, and `otelcol_process_memory_rss`, with `service.name` `otelcol-custom`. Because
 every collector sends these, every collector's IAM role needs `cloudwatch:PutMetricData`, even where no application

@@ -2,11 +2,13 @@
 Regenerate the contract fixture with E2E_WRITE_CONTRACT=1 pytest test/e2e/test_self_metrics.py -k contract."""
 import json
 import os
+import time
 from pathlib import Path
+from urllib.request import Request, urlopen
 
 import pytest
 
-from conftest import Compose, Sink, TraceBuilder, send_traces, wait_until
+from conftest import Compose, Sink, TraceBuilder, _attr, send_traces, wait_until
 
 CONTRACT_FIXTURE = Path(__file__).parent / "fixtures" / "self-metrics-contract.json"
 EXPORT_INTERVAL_S = 60
@@ -116,3 +118,36 @@ def test_default_config_exits_cleanly_when_stopped(e2e_out, fake_xray):
         code = compose.exit_code("agent")
         tail = "\n".join(compose.logs("agent").splitlines()[-20:])
         assert code == 0, f"agent exited with {code}; last log lines:\n{tail}"
+
+
+def send_gauge(port, name, value, service):
+    payload = {"resourceMetrics": [{
+        "resource": {"attributes": [_attr("service.name", service)]},
+        "scopeMetrics": [{"scope": {"name": "e2e"}, "metrics": [{
+            "name": name,
+            "gauge": {"dataPoints": [{"asDouble": value, "timeUnixNano": str(time.time_ns())}]},
+        }]}],
+    }]}
+    request = Request(f"http://127.0.0.1:{port}/v1/metrics", data=json.dumps(payload).encode(),
+                      headers={"Content-Type": "application/json"}, method="POST")
+    with urlopen(request, timeout=10) as response:
+        assert response.status == 200, response.status
+
+
+def test_application_metrics_still_flow(e2e_out, fake_xray):
+    compose = Compose("agent-self-metrics.yaml", {"E2E_OUT": str(e2e_out), "FAKE_XRAY_PORT": str(fake_xray.port)})
+    with compose:
+        compose.up()
+        send_gauge(compose.port("agent", 55681), "e2e_application_gauge", 42.0, "foo-service")
+        sink = Sink(e2e_out, "sink")
+
+        def reached_sink():
+            return any(
+                m["name"] == "e2e_application_gauge"
+                for rm in sink.metrics() for sm in rm.get("scopeMetrics", []) for m in sm.get("metrics", []))
+
+        wait_until(reached_sink, timeout_s=30)
+        resource = next(rm["resource"] for rm in sink.metrics() for sm in rm.get("scopeMetrics", [])
+                        for m in sm.get("metrics", []) if m["name"] == "e2e_application_gauge")
+        assert _string_value(resource["attributes"], "service.name") == "foo-service"
+        assert _string_value(resource["attributes"], "deployment.environment.name") == "Test"
