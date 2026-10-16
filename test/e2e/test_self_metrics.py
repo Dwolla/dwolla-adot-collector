@@ -1,5 +1,18 @@
 """The default agent config's own metrics: the names and shapes CloudWatch queries depend on, and a clean shutdown.
-Regenerate the contract fixture with E2E_WRITE_CONTRACT=1 pytest test/e2e/test_self_metrics.py -k contract."""
+
+The contract fixture is the contract of the old push path, where the collector pushed its own metrics over OTLP to its
+own receiver. The pull path (metrics/self) must reproduce it. Regenerating the fixture from this config would only
+record the pull path's own output and prove nothing, so regenerate it from an image built with a push-path config:
+
+1. git clone . /tmp/push-ref && git -C /tmp/push-ref checkout b03703f
+   (the last commit with the push-path config; after a collector upgrade, check out the upgrade instead and set
+   otel-config.yaml back to the push path: the periodic OTLP reader to localhost:4317, without prometheus/self and
+   metrics/self)
+2. docker buildx build --load --tag dwolla/otel-collector:push-ref /tmp/push-ref
+3. From this checkout (the config comes from the image):
+   OTELCOL_IMAGE=dwolla/otel-collector:push-ref E2E_WRITE_CONTRACT=1 target/venv/bin/pytest test/e2e/test_self_metrics.py -k contract
+4. docker image rm dwolla/otel-collector:push-ref && rm -rf /tmp/push-ref, then run make check against this config.
+"""
 import json
 import os
 import re
