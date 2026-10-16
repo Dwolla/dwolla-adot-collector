@@ -2,6 +2,7 @@
 Regenerate the contract fixture with E2E_WRITE_CONTRACT=1 pytest test/e2e/test_self_metrics.py -k contract."""
 import json
 import os
+import re
 import time
 from pathlib import Path
 from urllib.request import Request, urlopen
@@ -67,6 +68,19 @@ def self_metric_contract(resource_metrics):
     }
 
 
+def self_metric_instance_ids(resource_metrics):
+    """The service.instance.id values on the resources that carry otelcol_ metrics."""
+    return {
+        _string_value(rm.get("resource", {}).get("attributes", []), "service.instance.id")
+        for rm in resource_metrics
+        if any(m["name"].startswith("otelcol_") for sm in rm.get("scopeMetrics", []) for m in sm.get("metrics", []))}
+
+
+def collector_instance_ids(logs):
+    """The service.instance.id every collector log line carries: the collector's own UUID."""
+    return set(re.findall(r'"service\.instance\.id": "([^"]+)"', logs))
+
+
 def writing_contract():
     return bool(os.environ.get("E2E_WRITE_CONTRACT"))
 
@@ -104,7 +118,12 @@ def run_agent_until_exported(e2e_out, fake_xray):
 def test_self_metrics_keep_their_contract(e2e_out, fake_xray):
     compose, sink = run_agent_until_exported(e2e_out, fake_xray)
     with compose:
-        contract = self_metric_contract(sink.metrics())
+        resource_metrics = sink.metrics()
+        collector_ids = collector_instance_ids(compose.logs("agent"))
+    assert len(collector_ids) == 1, f"expected one collector instance ID in the agent's logs, got {collector_ids}"
+    # Each collector's self-metrics must keep its own ID; a shared one would merge every collector into one series.
+    assert self_metric_instance_ids(resource_metrics) == collector_ids
+    contract = self_metric_contract(resource_metrics)
     if writing_contract():
         CONTRACT_FIXTURE.write_text(json.dumps(contract, indent=2, sort_keys=True) + "\n")
         pytest.skip("wrote fixture; rerun without E2E_WRITE_CONTRACT to verify")
