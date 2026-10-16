@@ -70,7 +70,7 @@ CloudWatch as described above.
 | `TAIL_SAMPLING_BATCH_SERVICES_REGEX` | Gateways | The services treated as batch services |
 
 Gateways must set every `TAIL_SAMPLING_*` variable except the regex. An unset `TAIL_SAMPLING_SPANS_PER_SEC` resolves
-to 0, and the gateway then keeps nothing. An unset `*_PERCENT` keeps nothing from its own slice.
+to 0, so the gateway keeps only error traces. An unset `*_PERCENT` keeps nothing from its own slice.
 
 `TAIL_SAMPLING_BATCH_SERVICES_REGEX` defaults to matching no service. Anchor the value, as in `\A(svc-a|svc-b)\z`,
 because the collector matches it unanchored.
@@ -83,25 +83,25 @@ nothing.
 
 ### What the gateway keeps
 
-Traces over 1000 spans are dropped first, errors included. Every other trace is checked against the slices in this
-order. The first slice whose rule keeps the trace decides: for the api, batch, and baseline slices that rule includes the
-percentage draw, so a trace that loses the draw moves on to the next slice. If the deciding slice is over its budget, the
-trace is dropped, not passed on:
+Traces over 1000 spans are dropped first, errors included. Every other trace with an error span is kept, uncapped and
+outside the slice budgets. Every remaining trace is checked against the slices in this order. The first slice whose rule
+keeps the trace decides: for the api, batch, and baseline slices that rule includes the percentage draw, so a trace that
+loses the draw moves on to the next slice. If the deciding slice is over its budget, the trace is dropped, not passed on:
 
 | Slice | Matches | Share of `TAIL_SAMPLING_SPANS_PER_SEC` |
 |-------|---------|-----------------------------------------|
-| errors | any span with an error status | 21% |
-| slow | whole-trace duration of at least 5000 ms | 15% |
-| flagged | a span with the boolean attribute `com.dwolla.keep=true` | 7% |
-| api | `service.name` exactly `api` (a literal, not a regex), then kept at `TAIL_SAMPLING_API_PERCENT` | 11% |
-| batch-structural | a batch service whose root span has `com.dwolla.sampling.tier` = `structural`; kept whole | 4% |
-| batch | any other batch-service trace (`com.dwolla.sampling.tier` = `chunk`), kept at `TAIL_SAMPLING_BATCH_PERCENT` | 25% |
-| baseline | every non-batch service, kept at `TAIL_SAMPLING_BASELINE_PERCENT` | 17% |
+| slow | whole-trace duration of at least 5000 ms | 19% |
+| flagged | a span with the boolean attribute `com.dwolla.keep=true` | 9% |
+| api | `service.name` exactly `api` (a literal, not a regex), then kept at `TAIL_SAMPLING_API_PERCENT` | 14% |
+| batch-structural | a batch service whose root span has `com.dwolla.sampling.tier` = `structural`; kept whole | 5% |
+| batch | any other batch-service trace (`com.dwolla.sampling.tier` = `chunk`), kept at `TAIL_SAMPLING_BATCH_PERCENT` | 32% |
+| baseline | every non-batch service, kept at `TAIL_SAMPLING_BASELINE_PERCENT` | 21% |
 
-Each slice's span budget is its share times `TAIL_SAMPLING_SPANS_PER_SEC`, per second, per gateway instance. Errors,
-slow, and flagged traces are budgeted like the rest. A trace bigger than its slice's budget is never kept by that slice,
-and it is not passed on to a later one. At a cap of 600, for example, the flagged slice (7%) holds traces of up to
-42 spans and batch-structural (4%) up to 24.
+Each slice's span budget is its share times `TAIL_SAMPLING_SPANS_PER_SEC`, per second, per gateway instance. Slow
+and flagged traces are budgeted like the rest. A trace bigger than its slice's budget is never kept by that slice,
+and it is not passed on to a later one. At a cap of 600, for example, the flagged slice (9%) holds traces of up to
+54 spans and batch-structural (5%) up to 30. Because error traces are uncapped, an outage can raise trace-backend
+ingestion, so watch backend ingestion volume.
 
 ### Interim sampling on the agents
 
