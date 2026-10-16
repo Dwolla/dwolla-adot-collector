@@ -105,7 +105,7 @@ processors:
         action: delete
       - key: service.version
         value: ""
-        action: upsert
+        action: insert
   transform/self-metrics:
     # The Prometheus format carries no units (without_units keeps the names unchanged), so each otelcol_ metric's unit
     # is set by name here. A collector upgrade that adds otelcol_ metrics means extending this table;
