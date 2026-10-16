@@ -90,9 +90,11 @@ processors:
   # attributes they had when the collector pushed them over OTLP.
   filter/self-metrics:
     # drops the series the receiver adds (up, scrape_*) and the endpoint's own handler stats; they aren't collector metrics
+    # Also drops this filter's own counter: the push path never had it, so it stays out of the self-metric contract.
     metrics:
       metric:
         - not IsMatch(name, "^otelcol_")
+        - IsMatch(name, "^otelcol_processor_filter_")
   resource/self-metrics:
     attributes:
       - key: server.address
@@ -114,12 +116,13 @@ processors:
       - context: metric
         statements:
           - set(unit, "{batches}") where IsMatch(name, "^otelcol_exporter_queue_(capacity|size)$")
+          - set(unit, "{datapoints}") where IsMatch(name, "^otelcol_(exporter_send_failed|exporter_sent|processor_accepted|receiver_accepted|receiver_failed|receiver_refused)_metric_points$")
           - set(unit, "{spans}") where IsMatch(name, "^otelcol_(exporter_send_failed|exporter_sent|processor_accepted|receiver_accepted|receiver_failed|receiver_refused)_spans$")
           - set(unit, "s") where IsMatch(name, "^otelcol_process_(cpu_seconds|uptime)$")
           - set(unit, "By") where IsMatch(name, "^otelcol_process_(memory_rss|runtime_heap_alloc_bytes|runtime_total_alloc_bytes|runtime_total_sys_memory_bytes)$")
-          - set(unit, "{units}") where name == "otelcol_processor_batch_batch_send_size"
+          - set(unit, "{units}") where IsMatch(name, "^otelcol_(exporter_queue|processor_batch)_batch_send_size$")
           - set(unit, "{combinations}") where name == "otelcol_processor_batch_metadata_cardinality"
-          - set(unit, "{times}") where name == "otelcol_processor_batch_timeout_trigger_send"
+          - set(unit, "{times}") where IsMatch(name, "^otelcol_processor_batch_(batch_size|timeout)_trigger_send$")
           - set(unit, "{items}") where IsMatch(name, "^otelcol_processor_(incoming|outgoing)_items$")
           - convert_gauge_to_sum("cumulative", false) where name == "otelcol_processor_batch_metadata_cardinality"
   batch/metrics:

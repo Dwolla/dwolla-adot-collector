@@ -13,6 +13,9 @@ from conftest import Compose, Sink, TraceBuilder, _attr, send_traces, wait_until
 
 CONTRACT_FIXTURE = Path(__file__).parent / "fixtures" / "self-metrics-contract.json"
 EXPORT_INTERVAL_S = 60
+# 30 traces of 3 spans in one request: more than batch/traces' send_batch_size (50) at once, so a batch is sent by size
+TRACE_COUNT = 30
+SECOND_CYCLE_METRIC = "otelcol_exporter_sent_metric_points"
 STABLE_RESOURCE_ATTRIBUTES = ("service.name", "deployment.environment.name")
 DATA_TYPES = ("sum", "gauge", "histogram", "exponentialHistogram", "summary")
 
@@ -29,7 +32,7 @@ def self_metric_contract(resource_metrics):
     """Reduces the sink's OTLP JSON to what must stay stable: each otelcol_ metric's name, data type, monotonicity,
     temporality, unit, and data-point attribute keys, plus the resource attribute keys and the values of the
     stable ones, and the sorted names of all other metrics (none expected: a pull reader's own series would show here).
-    Only the metrics present after one export cycle following a small burst of traces are included,
+    Only the metrics present after two export cycles following a burst of traces are included,
     and nothing that varies per run (instance IDs, timestamps, values)."""
     metrics = {}
     other_metric_names = set()
@@ -87,9 +90,15 @@ def writing_contract():
 
 def expected_self_metric_names():
     """Every self-metric the fixture expects, so the wait covers the whole set and a batch-timing split can't drop
-    one. When regenerating, the fixture may be stale, so only the span-flow pair is required."""
+    one. When regenerating, the fixture may be stale, so only the span-flow pair, a size-triggered batch send, and a
+    metric that first appears in the second export cycle (it counts the first cycle's export) are required."""
     if writing_contract():
-        return {"otelcol_receiver_accepted_spans", "otelcol_exporter_sent_spans"}
+        return {
+            "otelcol_receiver_accepted_spans",
+            "otelcol_exporter_sent_spans",
+            "otelcol_processor_batch_batch_size_trigger_send",
+            SECOND_CYCLE_METRIC,
+        }
     return set(json.loads(CONTRACT_FIXTURE.read_text())["metrics"])
 
 
@@ -99,16 +108,16 @@ def has_self_metrics(sink, expected):
 
 
 def run_agent_until_exported(e2e_out, fake_xray):
-    """Starts the default agent with a sink, sends it a few traces, and returns once the span-flow self-metrics
-    have reached the sink."""
+    """Starts the default agent with a sink, sends it a burst of traces, and returns once every expected self-metric
+    has reached the sink, which takes two export cycles."""
     compose = Compose("agent-self-metrics.yaml", {"E2E_OUT": str(e2e_out), "FAKE_XRAY_PORT": str(fake_xray.port)})
     try:
         compose.up()
         builder = TraceBuilder(seed=1)
-        send_traces(compose.port("agent", 55681), [builder.trace(spans=3) for _ in range(5)])
+        send_traces(compose.port("agent", 55681), [builder.trace(spans=3) for _ in range(TRACE_COUNT)])
         sink = Sink(e2e_out, "sink")
         expected = expected_self_metric_names()
-        wait_until(lambda: has_self_metrics(sink, expected), timeout_s=EXPORT_INTERVAL_S + 30)
+        wait_until(lambda: has_self_metrics(sink, expected), timeout_s=2 * EXPORT_INTERVAL_S + 30)
     except BaseException:
         compose.down()
         raise

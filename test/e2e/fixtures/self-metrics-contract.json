@@ -1,5 +1,14 @@
 {
   "metrics": {
+    "otelcol_exporter_queue_batch_send_size": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [
+        "exporter"
+      ],
+      "isMonotonic": null,
+      "type": "histogram",
+      "unit": "{units}"
+    },
     "otelcol_exporter_queue_capacity": {
       "aggregationTemporality": null,
       "dataPointAttributeKeys": [
@@ -20,6 +29,15 @@
       "type": "gauge",
       "unit": "{batches}"
     },
+    "otelcol_exporter_send_failed_metric_points": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [
+        "exporter"
+      ],
+      "isMonotonic": true,
+      "type": "sum",
+      "unit": "{datapoints}"
+    },
     "otelcol_exporter_send_failed_spans": {
       "aggregationTemporality": 2,
       "dataPointAttributeKeys": [
@@ -28,6 +46,15 @@
       "isMonotonic": true,
       "type": "sum",
       "unit": "{spans}"
+    },
+    "otelcol_exporter_sent_metric_points": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [
+        "exporter"
+      ],
+      "isMonotonic": true,
+      "type": "sum",
+      "unit": "{datapoints}"
     },
     "otelcol_exporter_sent_spans": {
       "aggregationTemporality": 2,
@@ -80,6 +107,15 @@
       "type": "sum",
       "unit": "s"
     },
+    "otelcol_processor_accepted_metric_points": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [
+        "processor"
+      ],
+      "isMonotonic": true,
+      "type": "sum",
+      "unit": "{datapoints}"
+    },
     "otelcol_processor_accepted_spans": {
       "aggregationTemporality": 2,
       "dataPointAttributeKeys": [
@@ -97,6 +133,15 @@
       "isMonotonic": null,
       "type": "histogram",
       "unit": "{units}"
+    },
+    "otelcol_processor_batch_batch_size_trigger_send": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [
+        "processor"
+      ],
+      "isMonotonic": true,
+      "type": "sum",
+      "unit": "{times}"
     },
     "otelcol_processor_batch_metadata_cardinality": {
       "aggregationTemporality": 2,
@@ -136,6 +181,16 @@
       "type": "sum",
       "unit": "{items}"
     },
+    "otelcol_receiver_accepted_metric_points": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [
+        "receiver",
+        "transport"
+      ],
+      "isMonotonic": true,
+      "type": "sum",
+      "unit": "{datapoints}"
+    },
     "otelcol_receiver_accepted_spans": {
       "aggregationTemporality": 2,
       "dataPointAttributeKeys": [
@@ -146,6 +201,16 @@
       "type": "sum",
       "unit": "{spans}"
     },
+    "otelcol_receiver_failed_metric_points": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [
+        "receiver",
+        "transport"
+      ],
+      "isMonotonic": true,
+      "type": "sum",
+      "unit": "{datapoints}"
+    },
     "otelcol_receiver_failed_spans": {
       "aggregationTemporality": 2,
       "dataPointAttributeKeys": [
@@ -155,6 +220,16 @@
       "isMonotonic": true,
       "type": "sum",
       "unit": "{spans}"
+    },
+    "otelcol_receiver_refused_metric_points": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [
+        "receiver",
+        "transport"
+      ],
+      "isMonotonic": true,
+      "type": "sum",
+      "unit": "{datapoints}"
     },
     "otelcol_receiver_refused_spans": {
       "aggregationTemporality": 2,
