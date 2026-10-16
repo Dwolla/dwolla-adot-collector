@@ -19,7 +19,7 @@ policies:
           type: span_count
           span_count:
             min_spans: 1001
-  # Every error trace under 1000 spans, uncapped: outside the composite, so no rate limit applies.
+  # Every error trace of up to 1000 spans, uncapped: outside the composite, so no rate limit applies.
   - name: errors
     type: status_code
     status_code:

@@ -62,7 +62,7 @@ CloudWatch as described above.
 | `AWS_REGION` | All | The region of the AWS endpoints and the SigV4 signing |
 | `DWOLLA_ENV` | All | The `deployment.environment.name` attribute |
 | `INTERIM_TRACE_SAMPLING_PERCENT` | Agents | The percentage of traces the agent keeps. Defaults to 40; set it to 100 to turn the interim sampler off |
-| `TAIL_SAMPLING_SPANS_PER_SEC` | Gateways | The total span budget per second across all kept traces |
+| `TAIL_SAMPLING_SPANS_PER_SEC` | Gateways | The span budget per second shared by the slices; error traces are kept outside it |
 | `TAIL_SAMPLING_NEW_TRACES_PER_SEC` | Gateways | The expected rate of new traces per second; the tail sampler uses it only as a sizing hint |
 | `TAIL_SAMPLING_API_PERCENT` | Gateways | The share of the API service's traces kept from its slice of the budget |
 | `TAIL_SAMPLING_BATCH_PERCENT` | Gateways | The share of batch-service traces kept from the batch slice |
@@ -83,10 +83,11 @@ nothing.
 
 ### What the gateway keeps
 
-Traces over 1000 spans are dropped first, errors included. Every other trace with an error span is kept, uncapped and
-outside the slice budgets. Every remaining trace is checked against the slices in this order. The first slice whose rule
-keeps the trace decides: for the api, batch, and baseline slices that rule includes the percentage draw, so a trace that
-loses the draw moves on to the next slice. If the deciding slice is over its budget, the trace is dropped, not passed on:
+Traces over 1000 spans are dropped first, errors included. Every other trace that reaches the gateway with an error span
+is kept, uncapped and outside the slice budgets. Every remaining trace is checked against the slices in this order. The
+first slice whose rule keeps the trace decides: for the api, batch, and baseline slices that rule includes the
+percentage draw, so a trace that loses the draw moves on to the next slice. If the deciding slice is over its budget,
+the trace is dropped, not passed on:
 
 | Slice | Matches | Share of `TAIL_SAMPLING_SPANS_PER_SEC` |
 |-------|---------|-----------------------------------------|
@@ -97,11 +98,11 @@ loses the draw moves on to the next slice. If the deciding slice is over its bud
 | batch | any other batch-service trace (`com.dwolla.sampling.tier` = `chunk`), kept at `TAIL_SAMPLING_BATCH_PERCENT` | 32% |
 | baseline | every non-batch service, kept at `TAIL_SAMPLING_BASELINE_PERCENT` | 21% |
 
-Each slice's span budget is its share times `TAIL_SAMPLING_SPANS_PER_SEC`, per second, per gateway instance. Slow
-and flagged traces are budgeted like the rest. A trace bigger than its slice's budget is never kept by that slice,
-and it is not passed on to a later one. At a cap of 600, for example, the flagged slice (9%) holds traces of up to
-54 spans and batch-structural (5%) up to 30. Because error traces are uncapped, an outage can raise trace-backend
-ingestion, so watch backend ingestion volume.
+Each slice's span budget is its share times `TAIL_SAMPLING_SPANS_PER_SEC`, per second, per gateway instance. Slow and
+flagged traces are budgeted like the rest. A trace bigger than its slice's budget is never kept by that slice, and it is
+not passed on to a later one. At a cap of 600, for example, the flagged slice (9%) holds traces of up to 54 spans and
+batch-structural (5%) up to 30. Because error traces are uncapped, an outage can raise trace-backend ingestion, so watch
+backend ingestion volume. On the awsxray fallback gateway, a burst can also hit X-Ray's segment-rate quota.
 
 ### Interim sampling on the agents
 
