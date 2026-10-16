@@ -167,6 +167,7 @@
       "unit": "{spans}"
     }
   },
+  "otherMetricNames": [],
   "resourceAttributeKeys": [
     "deployment.environment.name",
     "service.instance.id",

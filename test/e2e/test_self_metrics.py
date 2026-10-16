@@ -1,7 +1,10 @@
-"""The default agent config's own metrics: the names and shapes CloudWatch queries depend on, and a clean shutdown."""
+"""The default agent config's own metrics: the names and shapes CloudWatch queries depend on, and a clean shutdown.
+Regenerate the contract fixture with E2E_WRITE_CONTRACT=1 pytest test/e2e/test_self_metrics.py -k contract."""
 import json
 import os
 from pathlib import Path
+
+import pytest
 
 from conftest import Compose, Sink, TraceBuilder, send_traces, wait_until
 
@@ -22,9 +25,11 @@ def _string_value(attributes, key):
 def self_metric_contract(resource_metrics):
     """Reduces the sink's OTLP JSON to what must stay stable: each otelcol_ metric's name, data type, monotonicity,
     temporality, unit, and data-point attribute keys, plus the resource attribute keys and the values of the
-    stable ones. Only the metrics present after one export cycle following a small burst of traces are included,
+    stable ones, and the sorted names of all other metrics (none expected: a pull reader's own series would show here).
+    Only the metrics present after one export cycle following a small burst of traces are included,
     and nothing that varies per run (instance IDs, timestamps, values)."""
     metrics = {}
+    other_metric_names = set()
     resource_keys = set()
     resource_values = {}
     for rm in resource_metrics:
@@ -37,6 +42,7 @@ def self_metric_contract(resource_metrics):
         for sm in rm.get("scopeMetrics", []):
             for metric in sm.get("metrics", []):
                 if not metric["name"].startswith("otelcol_"):
+                    other_metric_names.add(metric["name"])
                     continue
                 data_type = next(t for t in DATA_TYPES if t in metric)
                 body = metric[data_type]
@@ -53,14 +59,27 @@ def self_metric_contract(resource_metrics):
                 entry["dataPointAttributeKeys"] = sorted(keys)
     return {
         "metrics": dict(sorted(metrics.items())),
+        "otherMetricNames": sorted(other_metric_names),
         "resourceAttributeKeys": sorted(resource_keys),
         "resourceAttributeValues": dict(sorted(resource_values.items())),
     }
 
 
-def has_self_metrics(sink):
+def writing_contract():
+    return bool(os.environ.get("E2E_WRITE_CONTRACT"))
+
+
+def expected_self_metric_names():
+    """Every self-metric the fixture expects, so the wait covers the whole set and a batch-timing split can't drop
+    one. When regenerating, the fixture may be stale, so only the span-flow pair is required."""
+    if writing_contract():
+        return {"otelcol_receiver_accepted_spans", "otelcol_exporter_sent_spans"}
+    return set(json.loads(CONTRACT_FIXTURE.read_text())["metrics"])
+
+
+def has_self_metrics(sink, expected):
     names = {m["name"] for rm in sink.metrics() for sm in rm.get("scopeMetrics", []) for m in sm.get("metrics", [])}
-    return {"otelcol_receiver_accepted_spans", "otelcol_exporter_sent_spans"} <= names
+    return expected <= names
 
 
 def run_agent_until_exported(e2e_out, fake_xray):
@@ -72,7 +91,8 @@ def run_agent_until_exported(e2e_out, fake_xray):
         builder = TraceBuilder(seed=1)
         send_traces(compose.port("agent", 55681), [builder.trace(spans=3) for _ in range(5)])
         sink = Sink(e2e_out, "sink")
-        wait_until(lambda: has_self_metrics(sink), timeout_s=EXPORT_INTERVAL_S + 30)
+        expected = expected_self_metric_names()
+        wait_until(lambda: has_self_metrics(sink, expected), timeout_s=EXPORT_INTERVAL_S + 30)
     except BaseException:
         compose.down()
         raise
@@ -83,8 +103,9 @@ def test_self_metrics_keep_their_contract(e2e_out, fake_xray):
     compose, sink = run_agent_until_exported(e2e_out, fake_xray)
     with compose:
         contract = self_metric_contract(sink.metrics())
-    if os.environ.get("E2E_WRITE_CONTRACT"):
+    if writing_contract():
         CONTRACT_FIXTURE.write_text(json.dumps(contract, indent=2, sort_keys=True) + "\n")
+        pytest.skip("wrote fixture; rerun without E2E_WRITE_CONTRACT to verify")
     assert contract == json.loads(CONTRACT_FIXTURE.read_text())
 
 
