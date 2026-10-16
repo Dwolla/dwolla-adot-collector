@@ -1,0 +1,20 @@
+# The default agent config, exporting to the in-process fake X-Ray (and its metrics to the same fake).
+x-agent: &agent
+  image: ${OTELCOL_IMAGE:-dwolla/otel-collector:latest}
+  command:
+    - --config=/etc/otel-config.yaml
+    - --set=exporters.awsxray.endpoint=http://host.docker.internal:${FAKE_XRAY_PORT}
+    - --set=exporters.otlphttp/cloudwatch.metrics_endpoint=http://host.docker.internal:${FAKE_XRAY_PORT}/v1/metrics
+  environment:
+    - AWS_REGION=us-west-2
+    - AWS_ACCESS_KEY_ID=test
+    - AWS_SECRET_ACCESS_KEY=test
+    - DWOLLA_ENV=Test
+    # A bare name forwards the variable only when it's set, so an unset one reaches the collector as unset and
+    # ${env:INTERIM_TRACE_SAMPLING_PERCENT:-40} applies. (An empty string would not trigger the default.)
+    - INTERIM_TRACE_SAMPLING_PERCENT
+  extra_hosts: ["host.docker.internal:host-gateway"]
+  ports: ["127.0.0.1::55681"]
+services:
+  agent-a: *agent
+  agent-b: *agent

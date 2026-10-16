@@ -1,0 +1,26 @@
+# Test stand-in for an OTLP backend: receives OTLP and writes it to /out/<SINK_NAME>-{traces,metrics}.jsonl.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+exporters:
+  file/traces:
+    path: /out/${env:SINK_NAME}-traces.jsonl
+    flush_interval: 1s
+  file/metrics:
+    path: /out/${env:SINK_NAME}-metrics.jsonl
+    flush_interval: 1s
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+service:
+  extensions: [health_check]
+  pipelines:
+    traces: {receivers: [otlp], exporters: [file/traces]}
+    metrics: {receivers: [otlp], exporters: [file/metrics]}
+  telemetry:
+    metrics:
+      level: none

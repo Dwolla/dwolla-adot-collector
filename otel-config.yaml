@@ -13,6 +13,14 @@ receivers:
       http:
         endpoint: 0.0.0.0:55681
   zipkin:
+  prometheus/self:
+    config:
+      scrape_configs:
+        - job_name: otelcol-custom
+          scrape_interval: 60s
+          static_configs:
+            - targets:
+                - 127.0.0.1:18888
 
 processors:
   memory_limiter:
@@ -77,6 +85,46 @@ processors:
       - key: deployment.environment.name
         value: ${env:DWOLLA_ENV}
         action: insert
+  # The next three processors only see the scraped self-metrics (see the metrics/self pipeline). They undo what the
+  # round trip through the Prometheus format and scrape loses or adds, so the metrics keep the names, types, units, and
+  # attributes they had when the collector pushed them over OTLP.
+  filter/self-metrics:
+    # drops the series the receiver adds (up, scrape_*) and the endpoint's own handler stats; they aren't collector metrics
+    # Also drops this filter's own counter: the push path never had it, so it stays out of the self-metric contract.
+    metrics:
+      metric:
+        - not IsMatch(name, "^otelcol_")
+        - IsMatch(name, "^otelcol_processor_filter_")
+  resource/self-metrics:
+    attributes:
+      - key: server.address
+        action: delete
+      - key: server.port
+        action: delete
+      - key: url.scheme
+        action: delete
+      - key: service.version
+        value: ""
+        action: insert
+  transform/self-metrics:
+    # The Prometheus format carries no units (without_units keeps the names unchanged), so each otelcol_ metric's unit
+    # is set by name here. A collector upgrade that adds otelcol_ metrics means extending this table;
+    # test_self_metrics_all_have_units fails until it is.
+    # The convert_gauge_to_sum statement is a deliberate one-off: the Prometheus format can't carry a non-monotonic
+    # sum, so that one metric (an up-down counter) arrives as a gauge and is turned back into a sum.
+    metric_statements:
+      - context: metric
+        statements:
+          - set(unit, "{batches}") where IsMatch(name, "^otelcol_exporter_queue_(capacity|size)$")
+          - set(unit, "{datapoints}") where IsMatch(name, "^otelcol_(exporter_send_failed|exporter_sent|processor_accepted|receiver_accepted|receiver_failed|receiver_refused)_metric_points$")
+          - set(unit, "{spans}") where IsMatch(name, "^otelcol_(exporter_send_failed|exporter_sent|processor_accepted|receiver_accepted|receiver_failed|receiver_refused)_spans$")
+          - set(unit, "s") where IsMatch(name, "^otelcol_process_(cpu_seconds|uptime)$")
+          - set(unit, "By") where IsMatch(name, "^otelcol_process_(memory_rss|runtime_heap_alloc_bytes|runtime_total_alloc_bytes|runtime_total_sys_memory_bytes)$")
+          - set(unit, "{units}") where IsMatch(name, "^otelcol_(exporter_queue|processor_batch)_batch_send_size$")
+          - set(unit, "{combinations}") where name == "otelcol_processor_batch_metadata_cardinality"
+          - set(unit, "{times}") where IsMatch(name, "^otelcol_processor_batch_(batch_size|timeout)_trigger_send$")
+          - set(unit, "{items}") where IsMatch(name, "^otelcol_processor_(incoming|outgoing)_items$")
+          - convert_gauge_to_sum("cumulative", false) where name == "otelcol_processor_batch_metadata_cardinality"
   batch/metrics:
     timeout: 10s
     send_batch_size: 200
@@ -126,19 +174,35 @@ service:
         - batch/metrics
       exporters:
         - otlphttp/cloudwatch
+    metrics/self:
+      receivers:
+        - prometheus/self
+      processors:
+        - memory_limiter
+        - filter/self-metrics
+        - resource/self-metrics
+        - transform/self-metrics
+        - resource/metrics
+        - batch/metrics
+      exporters:
+        - otlphttp/cloudwatch
 
   extensions:
     - health_check
     - sigv4auth
 
-  # Publish the collector's own metrics (e.g. otelcol_exporter_sent_spans, otelcol_exporter_send_failed_spans) by
-  # sending them to this collector's OTLP receiver, so they flow through the metrics pipeline like application metrics.
+  # Publish the collector's own metrics (e.g. otelcol_exporter_sent_spans, otelcol_exporter_send_failed_spans) on a
+  # localhost-only Prometheus endpoint, which the prometheus/self receiver scrapes into the metrics/self pipeline, so
+  # they reach CloudWatch like application metrics. A pull reader, because pushing them to this collector's own OTLP
+  # receiver fails at shutdown: receivers stop first, so the final push has nowhere to go and the collector exits
+  # non-zero.
   telemetry:
     metrics:
       readers:
-        - periodic:
-            interval: 60000 # milliseconds
+        - pull:
             exporter:
-              otlp:
-                protocol: grpc
-                endpoint: http://localhost:4317
+              prometheus:
+                host: 127.0.0.1
+                port: 18888
+                without_type_suffix: true
+                without_units: true
