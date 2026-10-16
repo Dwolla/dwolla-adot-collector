@@ -20,7 +20,7 @@ def attrs(span):
 
 
 def scope_attr_by_trace(sink, key):
-    """A scope attribute the tail-sampling processor recorded, per kept trace (it writes them on the scope, not the span)."""
+    """A scope attribute the tail-sampling processor recorded per kept trace (written on the scope, not the span)."""
     by_trace = {}
     for line in sink.traces_file.read_text().splitlines():
         for rs in json.loads(line).get("resourceSpans", []):
@@ -91,8 +91,8 @@ def crafted(seed):
 
 def test_decisions_with_baseline_off(e2e_out):
     t = crafted(seed=20)
-    # Error traces are uncapped, so only drop-oversized rejects the 1001-span error trace.
     t["slow_error"] = TraceBuilder(seed=200).trace(duration_ms=6000, error=True)
+    # Error traces are uncapped, so only drop-oversized rejects the 1001-span error trace.
     sink = run_gateway(e2e_out, list(t.values()), TAIL_SAMPLING_BASELINE_PERCENT="0",
                        TAIL_SAMPLING_SPANS_PER_SEC="10000")
     kept = sink.spans_by_trace()
@@ -140,8 +140,7 @@ def test_error_traces_never_reach_the_composite(e2e_out):
     assert set(sink.spans_by_trace()) == {t["error"].trace_id}
     # sample_on_first_match stops at `errors`, so the composite never evaluates (or spends budget on) an error trace.
     # `errors` evaluates both traces (it keeps one, passes on the other); `keep` only ever sees the plain trace.
-    wait_until(lambda: traces_evaluated_by_policy(sink).get("errors") == 2, timeout_s=30)
-    assert traces_evaluated_by_policy(sink).get("keep") == 1
+    assert traces_evaluated_by_policy(sink) == {"drop-oversized": 2, "errors": 2, "keep": 1}
 
 
 def test_self_metrics_carry_the_gateway_role(e2e_out):
