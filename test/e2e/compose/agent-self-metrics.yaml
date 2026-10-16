@@ -4,14 +4,17 @@ services:
     image: ${OTELCOL_IMAGE:-dwolla/otel-collector:latest}
     command:
       - --config=/etc/otel-config.yaml
-      # No traces are sent, so this endpoint is never used.
-      - --set=exporters.awsxray.endpoint=http://sink:4318
+      - --set=exporters.awsxray.endpoint=http://host.docker.internal:${FAKE_XRAY_PORT}
       - --set=exporters.otlphttp/cloudwatch.metrics_endpoint=http://sink:4318/v1/metrics
     environment:
       - AWS_REGION=us-west-2
       - AWS_ACCESS_KEY_ID=test
       - AWS_SECRET_ACCESS_KEY=test
       - DWOLLA_ENV=Test
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    ports:
+      - 127.0.0.1::55681
     depends_on:
       - sink
   sink:

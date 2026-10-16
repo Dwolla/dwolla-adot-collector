@@ -3,7 +3,7 @@ import json
 import os
 from pathlib import Path
 
-from conftest import Compose, Sink, wait_until
+from conftest import Compose, Sink, TraceBuilder, send_traces, wait_until
 
 CONTRACT_FIXTURE = Path(__file__).parent / "fixtures" / "self-metrics-contract.json"
 EXPORT_INTERVAL_S = 60
@@ -22,8 +22,8 @@ def _string_value(attributes, key):
 def self_metric_contract(resource_metrics):
     """Reduces the sink's OTLP JSON to what must stay stable: each otelcol_ metric's name, data type, monotonicity,
     temporality, unit, and data-point attribute keys, plus the resource attribute keys and the values of the
-    stable ones. Only the metrics present after one export cycle with no traffic are included, and nothing that
-    varies per run (instance IDs, timestamps, values)."""
+    stable ones. Only the metrics present after one export cycle following a small burst of traces are included,
+    and nothing that varies per run (instance IDs, timestamps, values)."""
     metrics = {}
     resource_keys = set()
     resource_values = {}
@@ -59,15 +59,18 @@ def self_metric_contract(resource_metrics):
 
 
 def has_self_metrics(sink):
-    return any(m["name"].startswith("otelcol_")
-               for rm in sink.metrics() for sm in rm.get("scopeMetrics", []) for m in sm.get("metrics", []))
+    names = {m["name"] for rm in sink.metrics() for sm in rm.get("scopeMetrics", []) for m in sm.get("metrics", [])}
+    return {"otelcol_receiver_accepted_spans", "otelcol_exporter_sent_spans"} <= names
 
 
-def run_agent_until_exported(e2e_out):
-    """Starts the default agent with a sink and returns once a self-metric has reached the sink."""
-    compose = Compose("agent-self-metrics.yaml", {"E2E_OUT": str(e2e_out)})
+def run_agent_until_exported(e2e_out, fake_xray):
+    """Starts the default agent with a sink, sends it a few traces, and returns once the span-flow self-metrics
+    have reached the sink."""
+    compose = Compose("agent-self-metrics.yaml", {"E2E_OUT": str(e2e_out), "FAKE_XRAY_PORT": str(fake_xray.port)})
     try:
         compose.up()
+        builder = TraceBuilder(seed=1)
+        send_traces(compose.port("agent", 55681), [builder.trace(spans=3) for _ in range(5)])
         sink = Sink(e2e_out, "sink")
         wait_until(lambda: has_self_metrics(sink), timeout_s=EXPORT_INTERVAL_S + 30)
     except BaseException:
@@ -76,8 +79,8 @@ def run_agent_until_exported(e2e_out):
     return compose, sink
 
 
-def test_self_metrics_keep_their_contract(e2e_out):
-    compose, sink = run_agent_until_exported(e2e_out)
+def test_self_metrics_keep_their_contract(e2e_out, fake_xray):
+    compose, sink = run_agent_until_exported(e2e_out, fake_xray)
     with compose:
         contract = self_metric_contract(sink.metrics())
     if os.environ.get("E2E_WRITE_CONTRACT"):
@@ -85,8 +88,8 @@ def test_self_metrics_keep_their_contract(e2e_out):
     assert contract == json.loads(CONTRACT_FIXTURE.read_text())
 
 
-def test_default_config_exits_cleanly_when_stopped(e2e_out):
-    compose, _ = run_agent_until_exported(e2e_out)
+def test_default_config_exits_cleanly_when_stopped(e2e_out, fake_xray):
+    compose, _ = run_agent_until_exported(e2e_out, fake_xray)
     with compose:
         compose.stop("agent", timeout_s=30)
         code = compose.exit_code("agent")
