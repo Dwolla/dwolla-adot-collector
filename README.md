@@ -39,7 +39,9 @@ every 60 s into the same export path (a pull rather than a push, so stopping the
 `otelcol_exporter_sent_spans` and `otelcol_exporter_send_failed_spans` (labeled by `exporter`),
 `otelcol_receiver_refused_spans`, and `otelcol_process_memory_rss`, with `service.name` `otelcol-custom`. Because
 every collector sends these, every collector's IAM role needs `cloudwatch:PutMetricData`, even where no application
-sends metrics; without it, the collector logs a failed metrics export every minute.
+sends metrics; without it, the collector logs a failed metrics export every minute. The scrape doesn't carry start
+times for cumulative metrics and CloudWatch requires them, so the `metricstarttime` processor sets each one to the
+collector's start time, which is exact because the scraped process is the collector.
 
 ## Versioning
 
