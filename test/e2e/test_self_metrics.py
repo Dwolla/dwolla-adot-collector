@@ -160,6 +160,52 @@ def test_self_metrics_all_have_units(e2e_out, fake_xray):
     assert not without_unit, f"self-metrics reached the sink without a unit; extend transform/self-metrics: {without_unit}"
 
 
+CUMULATIVE_TEMPORALITIES = ("AGGREGATION_TEMPORALITY_CUMULATIVE", 2)
+
+
+def cumulative_self_metric_points(resource_metrics):
+    """Every cumulative Sum and Histogram data point on an otelcol_ metric, as (series, metric name, point), where the
+    series is the metric name, the data-point attributes, and the collector's service.instance.id."""
+    for rm in resource_metrics:
+        instance_id = _string_value(rm.get("resource", {}).get("attributes", []), "service.instance.id")
+        for sm in rm.get("scopeMetrics", []):
+            for metric in sm.get("metrics", []):
+                if not metric["name"].startswith("otelcol_"):
+                    continue
+                for data_type in ("sum", "histogram"):
+                    body = metric.get(data_type)
+                    if body is None or body.get("aggregationTemporality") not in CUMULATIVE_TEMPORALITIES:
+                        continue
+                    for point in body.get("dataPoints", []):
+                        attributes = json.dumps(sorted(point.get("attributes", []), key=lambda a: a["key"]), sort_keys=True)
+                        yield (metric["name"], attributes, instance_id), metric["name"], point
+
+
+def test_cumulative_self_metrics_carry_stable_start_times(e2e_out, fake_xray):
+    """The backend rejects a cumulative point without a start time, and a start time that moves between exports reads
+    as a reset on every export."""
+    compose, sink = run_agent_until_exported(e2e_out, fake_xray)
+    with compose:
+        resource_metrics = sink.metrics()
+    points = list(cumulative_self_metric_points(resource_metrics))
+    assert points, "no cumulative otelcol_ data points reached the sink"
+    invalid = sorted({
+        (name, point.get("startTimeUnixNano"), point["timeUnixNano"])
+        for _, name, point in points
+        if not (int(point.get("startTimeUnixNano", 0)) > 0
+                and int(point["startTimeUnixNano"]) < int(point["timeUnixNano"]))})
+    assert not invalid, "cumulative self-metric points need 0 < start < end; (name, start, end): " + "; ".join(
+        f"{name} start={start} end={end}" for name, start, end in invalid)
+    start_times = {}
+    for series, _, point in points:
+        start_times.setdefault(series, set()).add(point["startTimeUnixNano"])
+    assert any(
+        len({point["timeUnixNano"] for s, _, point in points if s == series}) >= 2 for series in start_times
+    ), "no cumulative series was exported twice, so stability can't be checked"
+    moving = sorted((series[0], sorted(times)) for series, times in start_times.items() if len(times) > 1)
+    assert not moving, f"start times changed between exports; (name, start times): {moving}"
+
+
 def test_default_config_exits_cleanly_when_stopped(e2e_out, fake_xray):
     compose, _ = run_agent_until_exported(e2e_out, fake_xray)
     with compose:
