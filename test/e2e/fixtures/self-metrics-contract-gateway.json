@@ -1,0 +1,330 @@
+{
+  "metrics": {
+    "otelcol_exporter_queue_batch_send_size": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [
+        "exporter"
+      ],
+      "isMonotonic": null,
+      "type": "histogram",
+      "unit": "{units}"
+    },
+    "otelcol_exporter_queue_capacity": {
+      "aggregationTemporality": null,
+      "dataPointAttributeKeys": [
+        "data_type",
+        "exporter"
+      ],
+      "isMonotonic": null,
+      "type": "gauge",
+      "unit": "{batches}"
+    },
+    "otelcol_exporter_queue_size": {
+      "aggregationTemporality": null,
+      "dataPointAttributeKeys": [
+        "data_type",
+        "exporter"
+      ],
+      "isMonotonic": null,
+      "type": "gauge",
+      "unit": "{batches}"
+    },
+    "otelcol_exporter_send_failed_metric_points": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [
+        "exporter"
+      ],
+      "isMonotonic": true,
+      "type": "sum",
+      "unit": "{datapoints}"
+    },
+    "otelcol_exporter_send_failed_spans": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [
+        "exporter"
+      ],
+      "isMonotonic": true,
+      "type": "sum",
+      "unit": "{spans}"
+    },
+    "otelcol_exporter_sent_metric_points": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [
+        "exporter"
+      ],
+      "isMonotonic": true,
+      "type": "sum",
+      "unit": "{datapoints}"
+    },
+    "otelcol_exporter_sent_spans": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [
+        "exporter"
+      ],
+      "isMonotonic": true,
+      "type": "sum",
+      "unit": "{spans}"
+    },
+    "otelcol_process_cpu_seconds": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [],
+      "isMonotonic": true,
+      "type": "sum",
+      "unit": "s"
+    },
+    "otelcol_process_memory_rss": {
+      "aggregationTemporality": null,
+      "dataPointAttributeKeys": [],
+      "isMonotonic": null,
+      "type": "gauge",
+      "unit": "By"
+    },
+    "otelcol_process_runtime_heap_alloc_bytes": {
+      "aggregationTemporality": null,
+      "dataPointAttributeKeys": [],
+      "isMonotonic": null,
+      "type": "gauge",
+      "unit": "By"
+    },
+    "otelcol_process_runtime_total_alloc_bytes": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [],
+      "isMonotonic": true,
+      "type": "sum",
+      "unit": "By"
+    },
+    "otelcol_process_runtime_total_sys_memory_bytes": {
+      "aggregationTemporality": null,
+      "dataPointAttributeKeys": [],
+      "isMonotonic": null,
+      "type": "gauge",
+      "unit": "By"
+    },
+    "otelcol_process_uptime": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [],
+      "isMonotonic": true,
+      "type": "sum",
+      "unit": "s"
+    },
+    "otelcol_processor_accepted_metric_points": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [
+        "processor"
+      ],
+      "isMonotonic": true,
+      "type": "sum",
+      "unit": "{datapoints}"
+    },
+    "otelcol_processor_accepted_spans": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [
+        "processor"
+      ],
+      "isMonotonic": true,
+      "type": "sum",
+      "unit": "{spans}"
+    },
+    "otelcol_processor_batch_batch_send_size": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [
+        "processor"
+      ],
+      "isMonotonic": null,
+      "type": "histogram",
+      "unit": "{units}"
+    },
+    "otelcol_processor_batch_metadata_cardinality": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [
+        "processor"
+      ],
+      "isMonotonic": null,
+      "type": "sum",
+      "unit": "{combinations}"
+    },
+    "otelcol_processor_batch_timeout_trigger_send": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [
+        "processor"
+      ],
+      "isMonotonic": true,
+      "type": "sum",
+      "unit": "{times}"
+    },
+    "otelcol_processor_incoming_items": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [
+        "otel.signal",
+        "processor"
+      ],
+      "isMonotonic": true,
+      "type": "sum",
+      "unit": "{items}"
+    },
+    "otelcol_processor_outgoing_items": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [
+        "otel.signal",
+        "processor"
+      ],
+      "isMonotonic": true,
+      "type": "sum",
+      "unit": "{items}"
+    },
+    "otelcol_processor_tail_sampling_count_traces_sampled": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [
+        "decision",
+        "policy",
+        "sampled"
+      ],
+      "isMonotonic": true,
+      "type": "sum",
+      "unit": "{traces}"
+    },
+    "otelcol_processor_tail_sampling_global_count_traces_sampled": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [
+        "decision",
+        "sampled"
+      ],
+      "isMonotonic": true,
+      "type": "sum",
+      "unit": "{traces}"
+    },
+    "otelcol_processor_tail_sampling_new_trace_id_received": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [],
+      "isMonotonic": true,
+      "type": "sum",
+      "unit": "{traces}"
+    },
+    "otelcol_processor_tail_sampling_sampling_decision_timer_latency": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [],
+      "isMonotonic": null,
+      "type": "histogram",
+      "unit": "ms"
+    },
+    "otelcol_processor_tail_sampling_sampling_policy_evaluation_error": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [],
+      "isMonotonic": true,
+      "type": "sum",
+      "unit": "{errors}"
+    },
+    "otelcol_processor_tail_sampling_sampling_policy_execution_count": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [
+        "policy"
+      ],
+      "isMonotonic": true,
+      "type": "sum",
+      "unit": "{executions}"
+    },
+    "otelcol_processor_tail_sampling_sampling_policy_execution_time_sum": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [
+        "policy"
+      ],
+      "isMonotonic": true,
+      "type": "sum",
+      "unit": "\u00b5s"
+    },
+    "otelcol_processor_tail_sampling_sampling_trace_dropped_too_early": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [],
+      "isMonotonic": true,
+      "type": "sum",
+      "unit": "{traces}"
+    },
+    "otelcol_processor_tail_sampling_sampling_trace_removal_age": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [],
+      "isMonotonic": null,
+      "type": "histogram",
+      "unit": "s"
+    },
+    "otelcol_processor_tail_sampling_sampling_traces_on_memory": {
+      "aggregationTemporality": null,
+      "dataPointAttributeKeys": [],
+      "isMonotonic": null,
+      "type": "gauge",
+      "unit": "{traces}"
+    },
+    "otelcol_receiver_accepted_metric_points": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [
+        "receiver",
+        "transport"
+      ],
+      "isMonotonic": true,
+      "type": "sum",
+      "unit": "{datapoints}"
+    },
+    "otelcol_receiver_accepted_spans": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [
+        "receiver",
+        "transport"
+      ],
+      "isMonotonic": true,
+      "type": "sum",
+      "unit": "{spans}"
+    },
+    "otelcol_receiver_failed_metric_points": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [
+        "receiver",
+        "transport"
+      ],
+      "isMonotonic": true,
+      "type": "sum",
+      "unit": "{datapoints}"
+    },
+    "otelcol_receiver_failed_spans": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [
+        "receiver",
+        "transport"
+      ],
+      "isMonotonic": true,
+      "type": "sum",
+      "unit": "{spans}"
+    },
+    "otelcol_receiver_refused_metric_points": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [
+        "receiver",
+        "transport"
+      ],
+      "isMonotonic": true,
+      "type": "sum",
+      "unit": "{datapoints}"
+    },
+    "otelcol_receiver_refused_spans": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [
+        "receiver",
+        "transport"
+      ],
+      "isMonotonic": true,
+      "type": "sum",
+      "unit": "{spans}"
+    }
+  },
+  "otherMetricNames": [],
+  "resourceAttributeKeys": [
+    "com.dwolla.otel.collector.role",
+    "deployment.environment.name",
+    "service.instance.id",
+    "service.name",
+    "service.version"
+  ],
+  "resourceAttributeValues": {
+    "com.dwolla.otel.collector.role": "gateway",
+    "deployment.environment.name": "Test",
+    "service.name": "otelcol-custom"
+  }
+}

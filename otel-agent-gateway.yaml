@@ -13,6 +13,7 @@ receivers:
       http:
         endpoint: 0.0.0.0:55681
   zipkin:
+  prometheus/self: ${file:/etc/self-metrics/prometheus-receiver.yaml}
 
 processors:
   memory_limiter:
@@ -78,6 +79,13 @@ processors:
       - key: deployment.environment.name
         value: ${env:DWOLLA_ENV}
         action: insert
+  metricstarttime: ${file:/etc/self-metrics/metricstarttime.yaml}
+  # The next three processors only see the scraped self-metrics (see the metrics/self pipeline). They undo what the
+  # round trip through the Prometheus format and scrape loses or adds, so the metrics keep the names, types, units, and
+  # attributes they had when the collector pushed them over OTLP.
+  filter/self-metrics: ${file:/etc/self-metrics/filter.yaml}
+  resource/self-metrics: ${file:/etc/self-metrics/resource.yaml}
+  transform/self-metrics: ${file:/etc/self-metrics/transform.yaml}
   batch/metrics:
     timeout: 10s
     send_batch_size: 200
@@ -135,19 +143,11 @@ service:
         - batch/metrics
       exporters:
         - otlphttp/cloudwatch
+    metrics/self: ${file:/etc/self-metrics/pipeline.yaml}
 
   extensions:
     - health_check
     - sigv4auth
 
-  # Publish the collector's own metrics (e.g. otelcol_exporter_sent_spans, otelcol_exporter_send_failed_spans) by
-  # sending them to this collector's OTLP receiver, so they flow through the metrics pipeline like application metrics.
   telemetry:
-    metrics:
-      readers:
-        - periodic:
-            interval: 60000 # milliseconds
-            exporter:
-              otlp:
-                protocol: grpc
-                endpoint: http://localhost:4317
+    metrics: ${file:/etc/self-metrics/telemetry-metrics.yaml}

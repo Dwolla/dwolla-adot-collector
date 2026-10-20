@@ -1,0 +1,50 @@
+# The gateway-routing agent config with its self-metrics (and application metrics) exported to a sink instead of
+# CloudWatch, and two gateway stand-ins that receive the traces it load-balances.
+x-otelcol: &otelcol
+  image: ${OTELCOL_IMAGE:-dwolla/otel-collector:latest}
+x-sink: &sink
+  <<: *otelcol
+  command:
+    - --config=/fixtures/sink.yaml
+  volumes:
+    - "../fixtures:/fixtures:ro"
+    - "${E2E_OUT}:/out"
+services:
+  agent:
+    <<: *otelcol
+    command:
+      - --config=/etc/otel-agent-gateway.yaml
+      - --set=exporters.otlphttp/cloudwatch.metrics_endpoint=http://sink:4318/v1/metrics
+    environment:
+      - AWS_REGION=us-west-2
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - DWOLLA_ENV=Test
+      # Keep every trace, so the loadbalancing exporter sees guaranteed traffic past the interim sampler's 40% default.
+      - INTERIM_TRACE_SAMPLING_PERCENT=100
+    ports:
+      - "127.0.0.1::55681"
+    depends_on:
+      - sink
+      - gw-1
+      - gw-2
+  sink:
+    <<: *sink
+    environment:
+      - SINK_NAME=sink
+  gw-1:
+    <<: *sink
+    environment:
+      - SINK_NAME=gw-1
+    networks:
+      default:
+        aliases:
+          - gateway.otel.internal
+  gw-2:
+    <<: *sink
+    environment:
+      - SINK_NAME=gw-2
+    networks:
+      default:
+        aliases:
+          - gateway.otel.internal

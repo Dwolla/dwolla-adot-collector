@@ -17,4 +17,14 @@ metric_statements:
       - set(unit, "{times}") where IsMatch(name, "^otelcol_processor_batch_(batch_size|timeout)_trigger_send$")
       - set(unit, "{items}") where IsMatch(name, "^otelcol_processor_(incoming|outgoing)_items$")
       - set(unit, "1") where name == "otelcol_processor_probabilistic_sampler_count_traces_sampled"
+      - set(unit, "ms") where IsMatch(name, "^otelcol_(loadbalancer_backend_latency|processor_tail_sampling_sampling_decision_timer_latency)$")
+      - set(unit, "{outcomes}") where name == "otelcol_loadbalancer_backend_outcome"
+      - set(unit, "{updates}") where name == "otelcol_loadbalancer_num_backend_updates"
+      - set(unit, "{backends}") where name == "otelcol_loadbalancer_num_backends"
+      - set(unit, "{resolutions}") where name == "otelcol_loadbalancer_num_resolutions"
+      - set(unit, "{traces}") where IsMatch(name, "^otelcol_processor_tail_sampling_(count_traces_sampled|global_count_traces_sampled|new_trace_id_received|sampling_trace_dropped_too_early|sampling_traces_on_memory)$")
+      - set(unit, "{errors}") where name == "otelcol_processor_tail_sampling_sampling_policy_evaluation_error"
+      - set(unit, "{executions}") where name == "otelcol_processor_tail_sampling_sampling_policy_execution_count"
+      - set(unit, "µs") where name == "otelcol_processor_tail_sampling_sampling_policy_execution_time_sum"
+      - set(unit, "s") where name == "otelcol_processor_tail_sampling_sampling_trace_removal_age"
       - convert_gauge_to_sum("cumulative", false) where name == "otelcol_processor_batch_metadata_cardinality"
