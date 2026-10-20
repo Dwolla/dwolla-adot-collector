@@ -1,0 +1,14 @@
+# The service.telemetry.metrics pull reader. Shared by every config through a file reference.
+# Publish the collector's own metrics (e.g. otelcol_exporter_sent_spans, otelcol_exporter_send_failed_spans) on a
+# localhost-only Prometheus endpoint, which the prometheus/self receiver scrapes into the metrics/self pipeline, so
+# they reach CloudWatch like application metrics. A pull reader, because pushing them to this collector's own OTLP
+# receiver fails at shutdown: receivers stop first, so the final push has nowhere to go and the collector exits
+# non-zero.
+readers:
+  - pull:
+      exporter:
+        prometheus:
+          host: 127.0.0.1
+          port: 18888
+          without_type_suffix: true
+          without_units: true

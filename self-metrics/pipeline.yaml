@@ -1,0 +1,14 @@
+# The metrics/self pipeline. Shared by every config through a file reference. Every config defines the
+# memory_limiter, resource/metrics, batch/metrics, and otlphttp/cloudwatch components it refers to.
+receivers:
+  - prometheus/self
+processors:
+  - memory_limiter
+  - filter/self-metrics
+  - resource/self-metrics
+  - transform/self-metrics
+  - metricstarttime
+  - resource/metrics
+  - batch/metrics
+exporters:
+  - otlphttp/cloudwatch

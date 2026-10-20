@@ -1,0 +1,6 @@
+# The metricstarttime processor for self-metrics. Shared by every config through a file reference.
+# The Prometheus receiver in this version no longer sets start times on cumulative points, and CloudWatch rejects
+# points without them. With no start-time metric in the scrape, this falls back to the collector's own start time,
+# which is exact here because the scraped process is the collector. It runs after transform/self-metrics because that
+# turns one gauge into a cumulative sum, and start times must be set on the final sums. It must run before batching.
+strategy: start_time_metric

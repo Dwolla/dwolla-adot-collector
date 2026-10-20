@@ -37,6 +37,7 @@ EXPOSE 4317 4318 13133
 COPY --chown=nonroot:nonroot otel-config.yaml /etc/otel-config.yaml
 COPY --chown=nonroot:nonroot otel-agent-gateway.yaml /etc/otel-agent-gateway.yaml
 COPY --chown=nonroot:nonroot tail-sampling.yaml /etc/tail-sampling.yaml
+COPY --chown=nonroot:nonroot self-metrics/ /etc/self-metrics/
 COPY --chown=nonroot:nonroot otel-gateway.yaml /etc/otel-gateway.yaml
 COPY --chown=nonroot:nonroot otel-gateway-xray.yaml /etc/otel-gateway-xray.yaml
 
