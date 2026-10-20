@@ -85,6 +85,12 @@ processors:
       - key: deployment.environment.name
         value: ${env:DWOLLA_ENV}
         action: insert
+  metricstarttime:
+    # The Prometheus receiver in this version no longer sets start times on cumulative points, and CloudWatch rejects
+    # points without them. With no start-time metric in the scrape, this falls back to the collector's own start time,
+    # which is exact here because the scraped process is the collector. It runs after transform/self-metrics because that
+    # turns one gauge into a cumulative sum, and start times must be set on the final sums. It must run before batching.
+    strategy: start_time_metric
   # The next three processors only see the scraped self-metrics (see the metrics/self pipeline). They undo what the
   # round trip through the Prometheus format and scrape loses or adds, so the metrics keep the names, types, units, and
   # attributes they had when the collector pushed them over OTLP.
@@ -182,6 +188,7 @@ service:
         - filter/self-metrics
         - resource/self-metrics
         - transform/self-metrics
+        - metricstarttime
         - resource/metrics
         - batch/metrics
       exporters:
