@@ -6,8 +6,9 @@ load-balances traces to two stand-in gateways.
 
 The contract fixture is the contract of the old push path, where the collector pushed its own metrics over OTLP to its
 own receiver. The pull path (metrics/self) must reproduce it. Regenerating the fixture from this config would only
-record the pull path's own output and prove nothing, so regenerate it from an image built with a push-path config (the three gateway fixtures were generated from their
-configs while those were still push-path, so regenerating one now needs the same treatment):
+record the pull path's own output and prove nothing, so regenerate it from an image built with a push-path config.
+The three gateway configs were push-path through 0369abf, so to regenerate a gateway fixture, check out 0369abf in
+step 1 and use the same commands:
 
 1. git clone . /tmp/push-ref && git -C /tmp/push-ref checkout b03703f
    (the last commit with the push-path config; after a collector upgrade, check out the upgrade instead and set

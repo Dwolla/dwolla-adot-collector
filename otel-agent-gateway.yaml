@@ -80,7 +80,7 @@ processors:
         value: ${env:DWOLLA_ENV}
         action: insert
   metricstarttime: ${file:/etc/self-metrics/metricstarttime.yaml}
-  # The next three processors only see the scraped self-metrics (see the metrics/self pipeline). They undo what the
+  # The next three processors only see the scraped self-metrics (see self-metrics/pipeline.yaml). They undo what the
   # round trip through the Prometheus format and scrape loses or adds, so the metrics keep the names, types, units, and
   # attributes they had when the collector pushed them over OTLP.
   filter/self-metrics: ${file:/etc/self-metrics/filter.yaml}

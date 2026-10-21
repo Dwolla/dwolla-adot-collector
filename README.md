@@ -58,6 +58,11 @@ The image ships four configs. The default is the agent config; choose another by
 Both gateway configs embed the same tail-sampling policy from `/etc/tail-sampling.yaml`. All four send metrics to
 CloudWatch as described above.
 
+The self-metrics pieces (the Prometheus pull receiver, the self processors, the `metrics/self` pipeline, and
+`service.telemetry.metrics`) live in [`self-metrics/`](self-metrics) and are baked into the image at
+`/etc/self-metrics/`. All four configs include them with `${file:...}` references; `otel-config.yaml` is the
+example.
+
 ### Environment variables
 
 | Variable | Used by | Controls |
