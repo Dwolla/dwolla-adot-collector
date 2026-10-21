@@ -1,0 +1,22 @@
+services:
+  gateway:
+    image: ${OTELCOL_IMAGE:-dwolla/otel-collector:latest}
+    command:
+      - --config=/etc/otel-gateway-xray.yaml
+      - --set=exporters.awsxray.endpoint=http://host.docker.internal:${FAKE_XRAY_PORT}
+      - --set=exporters.otlphttp/cloudwatch.metrics_endpoint=http://host.docker.internal:${FAKE_XRAY_PORT}/v1/metrics
+    environment:
+      - AWS_REGION=us-west-2
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - DWOLLA_ENV=Test
+      - TAIL_SAMPLING_SPANS_PER_SEC=600
+      - TAIL_SAMPLING_BASELINE_PERCENT=0
+      - TAIL_SAMPLING_API_PERCENT=100
+      - TAIL_SAMPLING_NEW_TRACES_PER_SEC=100
+      - TAIL_SAMPLING_BATCH_PERCENT=0
+      - TAIL_SAMPLING_BATCH_SERVICES_REGEX=\Afoo-batch\z
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1::4318"

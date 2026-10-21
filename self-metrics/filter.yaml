@@ -1,0 +1,7 @@
+# The filter/self-metrics processor. Shared by every config through a file reference.
+# drops the series the receiver adds (up, scrape_*) and the endpoint's own handler stats; they aren't collector metrics
+# Also drops this filter's own counter: the push path never had it, so it stays out of the self-metric contract.
+metrics:
+  metric:
+    - not IsMatch(name, "^otelcol_")
+    - IsMatch(name, "^otelcol_processor_filter_")

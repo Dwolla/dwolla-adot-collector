@@ -1,0 +1,11 @@
+# The resource/self-metrics processor. Shared by every config through a file reference.
+attributes:
+  - key: server.address
+    action: delete
+  - key: server.port
+    action: delete
+  - key: url.scheme
+    action: delete
+  - key: service.version
+    value: ""
+    action: insert

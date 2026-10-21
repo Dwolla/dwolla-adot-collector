@@ -1,0 +1,131 @@
+# The gateway's tail-sampling policy. Embedded into otel-gateway.yaml and otel-gateway-xray.yaml by file reference,
+# so both gateway configs always sample the same way. Per-environment values come from the gateway task's environment.
+decision_wait: 30s
+num_traces: 50000
+expected_new_traces_per_sec: ${env:TAIL_SAMPLING_NEW_TRACES_PER_SEC}
+decision_cache:
+  sampled_cache_size: 500000
+  non_sampled_cache_size: 500000
+# Stop at the first policy that keeps a trace, so an error trace never reaches (or spends budget in) the composite.
+# drop-oversized still runs first: a drop also stops evaluation.
+sample_on_first_match: true
+policies:
+  # Drops any trace over 1000 spans, errors included, before any slice is consulted.
+  - name: drop-oversized
+    type: drop
+    drop:
+      drop_sub_policy:
+        - name: over-1000-spans
+          type: span_count
+          span_count:
+            min_spans: 1001
+  # Every error trace of up to 1000 spans, uncapped: outside the composite, so no rate limit applies.
+  - name: errors
+    type: status_code
+    status_code:
+      status_codes:
+        - ERROR
+  - name: keep
+    type: composite
+    composite:
+      # Set every TAIL_SAMPLING_* numeric value. An unset TAIL_SAMPLING_SPANS_PER_SEC resolves to 0 and the composite
+      # keeps nothing (error traces are still kept); an unset *_PERCENT keeps nothing from its own slice;
+      # TAIL_SAMPLING_NEW_TRACES_PER_SEC is only a sizing hint.
+      # A value that is set but empty skips the default, so TAIL_SAMPLING_BATCH_SERVICES_REGEX must be unset or real.
+      max_total_spans_per_second: ${env:TAIL_SAMPLING_SPANS_PER_SEC}
+      policy_order:
+        - slow
+        - flagged
+        - api
+        - batch-structural
+        - batch
+        - baseline
+      composite_sub_policy:
+        - name: slow
+          type: latency
+          latency:
+            threshold_ms: 5000
+        - name: flagged
+          type: boolean_attribute
+          boolean_attribute:
+            key: com.dwolla.keep
+            value: true
+        - name: api
+          type: and
+          and:
+            and_sub_policy:
+              - name: api-service
+                type: string_attribute
+                string_attribute:
+                  key: service.name
+                  values:
+                    - api
+              - name: api-share
+                type: probabilistic
+                probabilistic:
+                  sampling_percentage: ${env:TAIL_SAMPLING_API_PERCENT}
+        # Batch jobs mark each root span with com.dwolla.sampling.tier: structural roots are few and kept whole,
+        # chunk roots are many and sampled at a low share. TAIL_SAMPLING_BATCH_SERVICES_REGEX must be anchored
+        # (\A(svc-a|svc-b)\z): the regex is matched unanchored. The default \A\z matches no service. Single quotes
+        # keep YAML from reading \A as an escape; ^$ can't be used because env expansion rejects a $ inside it.
+        - name: batch-structural
+          type: and
+          and:
+            and_sub_policy:
+              - name: batch-service-structural
+                type: string_attribute
+                string_attribute:
+                  key: service.name
+                  values:
+                    - '${env:TAIL_SAMPLING_BATCH_SERVICES_REGEX:-\A\z}'
+                  enabled_regex_matching: true
+              - name: tier-structural
+                type: string_attribute
+                string_attribute:
+                  key: com.dwolla.sampling.tier
+                  values:
+                    - structural
+        - name: batch
+          type: and
+          and:
+            and_sub_policy:
+              - name: batch-service
+                type: string_attribute
+                string_attribute:
+                  key: service.name
+                  values:
+                    - '${env:TAIL_SAMPLING_BATCH_SERVICES_REGEX:-\A\z}'
+                  enabled_regex_matching: true
+              - name: batch-share
+                type: probabilistic
+                probabilistic:
+                  sampling_percentage: ${env:TAIL_SAMPLING_BATCH_PERCENT}
+        - name: baseline
+          type: and
+          and:
+            and_sub_policy:
+              - name: not-batch
+                type: string_attribute
+                string_attribute:
+                  key: service.name
+                  values:
+                    - '${env:TAIL_SAMPLING_BATCH_SERVICES_REGEX:-\A\z}'
+                  enabled_regex_matching: true
+                  invert_match: true
+              - name: baseline-share
+                type: probabilistic
+                probabilistic:
+                  sampling_percentage: ${env:TAIL_SAMPLING_BASELINE_PERCENT}
+      rate_allocation:
+        - policy: slow
+          percent: 19
+        - policy: flagged
+          percent: 9
+        - policy: api
+          percent: 14
+        - policy: batch-structural
+          percent: 5
+        - policy: batch
+          percent: 32
+        - policy: baseline
+          percent: 21

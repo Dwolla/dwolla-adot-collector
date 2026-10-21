@@ -181,6 +181,16 @@
       "type": "sum",
       "unit": "{items}"
     },
+    "otelcol_processor_probabilistic_sampler_count_traces_sampled": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [
+        "policy",
+        "sampled"
+      ],
+      "isMonotonic": true,
+      "type": "sum",
+      "unit": "1"
+    },
     "otelcol_receiver_accepted_metric_points": {
       "aggregationTemporality": 2,
       "dataPointAttributeKeys": [

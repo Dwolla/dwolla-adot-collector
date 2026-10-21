@@ -33,8 +33,11 @@ class Compose:
         self.env = {k: v for k, v in (env or {}).items() if v != ""}
 
     def _run(self, *args, check=True):
-        return subprocess.run(["docker", "compose", "-p", self.project, "-f", self.file, *args],
-                              env={**os.environ, **self.env}, check=check, capture_output=True, text=True)
+        result = subprocess.run(["docker", "compose", "-p", self.project, "-f", self.file, *args],
+                                env={**os.environ, **self.env}, capture_output=True, text=True)
+        if check and result.returncode != 0:
+            raise RuntimeError(f"docker compose {' '.join(args)} exited {result.returncode}:\n{result.stderr}")
+        return result
 
     def up(self, *services, wait=True):
         self._run("up", "-d", *(["--wait"] if wait else []), *services)

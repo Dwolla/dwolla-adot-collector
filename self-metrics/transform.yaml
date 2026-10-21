@@ -1,0 +1,31 @@
+# The transform/self-metrics processor. Shared by every config through a file reference.
+# The Prometheus format carries no units (without_units keeps the names unchanged), so each otelcol_ metric's unit
+# is set by name here. A collector upgrade that adds otelcol_ metrics means extending this table;
+# test_self_metrics_all_have_units fails until it is.
+# The convert_gauge_to_sum statement is a deliberate one-off: the Prometheus format can't carry a non-monotonic
+# sum, so that one metric (an up-down counter) arrives as a gauge and is turned back into a sum.
+metric_statements:
+  - context: metric
+    statements:
+      - set(unit, "{batches}") where IsMatch(name, "^otelcol_exporter_queue_(capacity|size)$")
+      - set(unit, "{datapoints}") where IsMatch(name, "^otelcol_(exporter_enqueue_failed|exporter_send_failed|exporter_sent|processor_accepted|receiver_accepted|receiver_failed|receiver_refused)_metric_points$")
+      - set(unit, "{spans}") where IsMatch(name, "^otelcol_(exporter_enqueue_failed|exporter_send_failed|exporter_sent|processor_accepted|receiver_accepted|receiver_failed|receiver_refused)_spans$")
+      - set(unit, "s") where IsMatch(name, "^otelcol_process_(cpu_seconds|uptime)$")
+      - set(unit, "By") where IsMatch(name, "^otelcol_process_(memory_rss|runtime_heap_alloc_bytes|runtime_total_alloc_bytes|runtime_total_sys_memory_bytes)$")
+      - set(unit, "{units}") where IsMatch(name, "^otelcol_(exporter_queue|processor_batch)_batch_send_size$")
+      - set(unit, "{combinations}") where name == "otelcol_processor_batch_metadata_cardinality"
+      - set(unit, "{times}") where IsMatch(name, "^otelcol_processor_batch_(batch_size|timeout)_trigger_send$")
+      - set(unit, "{items}") where IsMatch(name, "^otelcol_processor_(incoming|outgoing)_items$")
+      - set(unit, "1") where name == "otelcol_processor_probabilistic_sampler_count_traces_sampled"
+      - set(unit, "ms") where IsMatch(name, "^otelcol_(loadbalancer_backend_latency|processor_tail_sampling_sampling_decision_timer_latency)$")
+      - set(unit, "{outcomes}") where name == "otelcol_loadbalancer_backend_outcome"
+      - set(unit, "{updates}") where name == "otelcol_loadbalancer_num_backend_updates"
+      - set(unit, "{backends}") where name == "otelcol_loadbalancer_num_backends"
+      - set(unit, "{resolutions}") where name == "otelcol_loadbalancer_num_resolutions"
+      - set(unit, "{traces}") where IsMatch(name, "^otelcol_processor_tail_sampling_(count_traces_sampled|global_count_traces_sampled|new_trace_id_received|sampling_trace_dropped_too_early|sampling_traces_on_memory)$")
+      - set(unit, "{spans}") where name == "otelcol_processor_tail_sampling_early_releases_from_cache_decision"
+      - set(unit, "{errors}") where name == "otelcol_processor_tail_sampling_sampling_policy_evaluation_error"
+      - set(unit, "{executions}") where name == "otelcol_processor_tail_sampling_sampling_policy_execution_count"
+      - set(unit, "µs") where name == "otelcol_processor_tail_sampling_sampling_policy_execution_time_sum"
+      - set(unit, "s") where IsMatch(name, "^otelcol_processor_tail_sampling_sampling_(late_span_age|trace_removal_age)$")
+      - convert_gauge_to_sum("cumulative", false) where name == "otelcol_processor_batch_metadata_cardinality"

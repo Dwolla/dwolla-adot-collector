@@ -1,37 +1,93 @@
-"""The default agent config's own metrics: the names and shapes CloudWatch queries depend on, and a clean shutdown.
+"""Every config's own metrics: the names and shapes CloudWatch queries depend on, and a clean shutdown.
+
+Each of the four configs (default agent, gateway-routing agent, gateway, and X-Ray fallback gateway) gets every test,
+with its own compose file and traffic. A config's stack boots once (see collector_run) and every test for that config
+asserts on what that one run captured. The gateways reach tail-sampling decisions; the gateway-routing agent
+load-balances traces to two stand-in gateways.
 
 The contract fixture is the contract of the old push path, where the collector pushed its own metrics over OTLP to its
-own receiver. The pull path (metrics/self) must reproduce it. Regenerating the fixture from this config would only
-record the pull path's own output and prove nothing, so regenerate it from an image built with a push-path config:
+own receiver. The pull path (metrics/self) must reproduce it. Regenerating the fixture from the pull path would only
+record its own output and prove nothing, so regenerate from an image built with a push-path config:
 
-1. git clone . /tmp/push-ref && git -C /tmp/push-ref checkout b03703f
-   (the last commit with the push-path config; after a collector upgrade, check out the upgrade instead and set
-   otel-config.yaml back to the push path: the periodic OTLP reader to localhost:4317, without prometheus/self and
-   metrics/self)
+1. Copy this tree to a temporary directory (git archive HEAD | tar -x -C /tmp/push-ref) and, there:
+   - default fixture: change otel-config.yaml back to a push reader (a periodic OTLP reader to localhost:4317, without
+     prometheus/self and metrics/self);
+   - gateway fixtures: take otel-gateway.yaml and otel-gateway-xray.yaml (and otel-agent-gateway.yaml for the
+     agent-gateway one) from 0369abf, the last commit where they were push-path (git show 0369abf:<file>).
 2. docker buildx build --load --tag dwolla/otel-collector:push-ref /tmp/push-ref
 3. From this checkout (the config comes from the image):
    OTELCOL_IMAGE=dwolla/otel-collector:push-ref E2E_WRITE_CONTRACT=1 target/venv/bin/pytest test/e2e/test_self_metrics.py -k contract
-4. docker image rm dwolla/otel-collector:push-ref && rm -rf /tmp/push-ref, then run make check against this config.
+   (write only the fixtures of the configs you converted: -k "contract and <config id>"), then review the fixture diff.
+4. docker image rm dwolla/otel-collector:push-ref && rm -rf /tmp/push-ref, rebuild the image with make core, and run
+   make check.
 """
 import json
 import os
 import re
+import tempfile
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from urllib.request import Request, urlopen
 
 import pytest
 
-from conftest import Compose, Sink, TraceBuilder, _attr, send_traces, wait_until
+from conftest import Compose, FakeXRay, Sink, TraceBuilder, _attr, send_traces, wait_until
 
-CONTRACT_FIXTURE = Path(__file__).parent / "fixtures" / "self-metrics-contract.json"
+FIXTURES = Path(__file__).parent / "fixtures"
 EXPORT_INTERVAL_S = 60
+# A gateway's tail sampler holds a trace for its decision wait before the first decision metrics exist.
+DECISION_WAIT_S = 30
+# The sampler checks for due decisions on a one-second tick, so a span sent this long after the wait is late.
+LATE_SPAN_MARGIN_S = 5
 # 30 traces of 3 spans in one request: more than batch/traces' send_batch_size (50) at once, so a batch is sent by size
 TRACE_COUNT = 30
 SECOND_CYCLE_METRIC = "otelcol_exporter_sent_metric_points"
-STABLE_RESOURCE_ATTRIBUTES = ("service.name", "deployment.environment.name")
+APPLICATION_GAUGE = "e2e_application_gauge"
+STABLE_RESOURCE_ATTRIBUTES = ("service.name", "deployment.environment.name", "com.dwolla.otel.collector.role")
 DATA_TYPES = ("sum", "gauge", "histogram", "exponentialHistogram", "summary")
 
+
+@dataclass(frozen=True)
+class Config:
+    """One collector config under test: how to start it, which service is the collector, where its OTLP/HTTP receiver
+    listens, and what only it emits (so a fixture regeneration waits for those too)."""
+    id: str
+    compose: str
+    service: str
+    otlp_port: int
+    fixture: Path
+    error_traces: bool = False
+    decides_traces: bool = False
+    wait_extra_s: int = 0
+    generation_required: frozenset = frozenset()
+
+
+SPAN_FLOW = frozenset({
+    "otelcol_receiver_accepted_spans",
+    "otelcol_exporter_sent_spans",
+})
+AGENT_GATEWAY_ONLY = frozenset({
+    "otelcol_loadbalancer_num_backends",
+    "otelcol_loadbalancer_backend_outcome",
+    "otelcol_processor_probabilistic_sampler_count_traces_sampled",
+})
+GATEWAY_ONLY = frozenset({
+    "otelcol_processor_tail_sampling_count_traces_sampled",
+    "otelcol_processor_tail_sampling_early_releases_from_cache_decision",
+})
+CONFIGS = [
+    Config("default", "agent-self-metrics.yaml", "agent", 55681, FIXTURES / "self-metrics-contract.json",
+           generation_required=SPAN_FLOW | {"otelcol_processor_batch_batch_size_trigger_send"}),
+    Config("agent-gateway", "agent-gateway-self-metrics.yaml", "agent", 55681,
+           FIXTURES / "self-metrics-contract-agent-gateway.json",
+           generation_required=SPAN_FLOW | AGENT_GATEWAY_ONLY),
+    Config("gateway", "gateway-self-metrics.yaml", "gateway", 4318, FIXTURES / "self-metrics-contract-gateway.json",
+           error_traces=True, decides_traces=True, wait_extra_s=DECISION_WAIT_S, generation_required=SPAN_FLOW | GATEWAY_ONLY),
+    Config("gateway-xray", "gateway-xray-self-metrics.yaml", "gateway", 4318,
+           FIXTURES / "self-metrics-contract-gateway-xray.json",
+           error_traces=True, decides_traces=True, wait_extra_s=DECISION_WAIT_S, generation_required=SPAN_FLOW | GATEWAY_ONLY),
+]
 
 def _keys(attributes):
     return sorted(a["key"] for a in attributes)
@@ -101,18 +157,14 @@ def writing_contract():
     return bool(os.environ.get("E2E_WRITE_CONTRACT"))
 
 
-def expected_self_metric_names():
+def expected_self_metric_names(config):
     """Every self-metric the fixture expects, so the wait covers the whole set and a batch-timing split can't drop
-    one. When regenerating, the fixture may be stale, so only the span-flow pair, a size-triggered batch send, and a
-    metric that first appears in the second export cycle (it counts the first cycle's export) are required."""
+    one. When regenerating, the fixture may be stale, so only the config's required set is waited for: the span-flow
+    pair, what only this config emits, and a metric that first appears in the second export cycle (it counts the first
+    cycle's export)."""
     if writing_contract():
-        return {
-            "otelcol_receiver_accepted_spans",
-            "otelcol_exporter_sent_spans",
-            "otelcol_processor_batch_batch_size_trigger_send",
-            SECOND_CYCLE_METRIC,
-        }
-    return set(json.loads(CONTRACT_FIXTURE.read_text())["metrics"])
+        return {*config.generation_required, SECOND_CYCLE_METRIC}
+    return set(json.loads(config.fixture.read_text())["metrics"])
 
 
 def has_self_metrics(sink, expected):
@@ -120,42 +172,85 @@ def has_self_metrics(sink, expected):
     return expected <= names
 
 
-def run_agent_until_exported(e2e_out, fake_xray):
-    """Starts the default agent with a sink, sends it a burst of traces, and returns once every expected self-metric
-    has reached the sink, which takes two export cycles."""
-    compose = Compose("agent-self-metrics.yaml", {"E2E_OUT": str(e2e_out), "FAKE_XRAY_PORT": str(fake_xray.port)})
+@dataclass(frozen=True)
+class CollectorRun:
+    """What one config's collector run captured, read by every test for that config."""
+    config: Config
+    resource_metrics: list
+    logs_while_running: str
+    application_gauge_resource: dict
+    exit_code: object
+    logs_after_stop: str
+
+
+def application_gauge_reached_sink(sink):
+    return any(m["name"] == APPLICATION_GAUGE
+               for rm in sink.metrics() for sm in rm.get("scopeMetrics", []) for m in sm.get("metrics", []))
+
+
+def drive_collector(config, compose, sink):
+    """Starts the config, sends it a burst of traces, waits until every expected self-metric has reached the sink
+    (two export cycles; a gateway also gets late spans), and snapshots the sink and logs. Only then sends the application gauge, so it can't show up in
+    the self-metric snapshot, waits for it, and stops the collector to record its exit code."""
+    compose.up()
+    builder = TraceBuilder(seed=1)
+    port = compose.port(config.service, config.otlp_port)
+    traces = [builder.trace(spans=3, error=config.error_traces and i % 5 == 0) for i in range(TRACE_COUNT)]
+    send_traces(port, traces)
+    if config.decides_traces:
+        # Once the decisions are made, a further span of each trace is a late span: the sampler answers it from its
+        # decision cache. (sampling_late_span_age can't be pinned here: it is only recorded for a decided trace that is
+        # not in that cache, which the gateway's cache sizes never allow.)
+        time.sleep(DECISION_WAIT_S + LATE_SPAN_MARGIN_S)
+        send_traces(port, traces, spans_of=lambda t: t.spans[:1])
+    expected = expected_self_metric_names(config)
+    wait_until(lambda: has_self_metrics(sink, expected), timeout_s=2 * EXPORT_INTERVAL_S + 30 + config.wait_extra_s)
+    resource_metrics = sink.metrics()
+    logs_while_running = compose.logs(config.service)
+    send_gauge(port, APPLICATION_GAUGE, 42.0, "foo-service")
+    wait_until(lambda: application_gauge_reached_sink(sink), timeout_s=30)
+    gauge_resource = next(rm["resource"] for rm in sink.metrics() for sm in rm.get("scopeMetrics", [])
+                          for m in sm.get("metrics", []) if m["name"] == APPLICATION_GAUGE)
+    compose.stop(config.service, timeout_s=30)
+    return CollectorRun(config, resource_metrics, logs_while_running, gauge_resource,
+                        compose.exit_code(config.service), compose.logs(config.service))
+
+
+@pytest.fixture(scope="module", params=CONFIGS, ids=lambda c: c.id)
+def collector_run(request):
+    """One collector run per config, shared by every test in this module for that config. A failure raises the same
+    error, naming the config, in each test that depends on the run."""
+    config = request.param
+    fake_xray = FakeXRay()
     try:
-        compose.up()
-        builder = TraceBuilder(seed=1)
-        send_traces(compose.port("agent", 55681), [builder.trace(spans=3) for _ in range(TRACE_COUNT)])
-        sink = Sink(e2e_out, "sink")
-        expected = expected_self_metric_names()
-        wait_until(lambda: has_self_metrics(sink, expected), timeout_s=2 * EXPORT_INTERVAL_S + 30)
-    except BaseException:
-        compose.down()
-        raise
-    return compose, sink
+        with tempfile.TemporaryDirectory(prefix="otel-e2e-") as out:
+            os.chmod(out, 0o777)  # the image runs as nonroot
+            with Compose(config.compose, {"E2E_OUT": out, "FAKE_XRAY_PORT": str(fake_xray.port)}) as compose:
+                try:
+                    run = drive_collector(config, compose, Sink(out, "sink"))
+                except Exception as e:
+                    raise RuntimeError(f"the shared collector run for config '{config.id}' failed: {e}") from e
+                yield run
+    finally:
+        fake_xray.close()
 
 
-def test_self_metrics_keep_their_contract(e2e_out, fake_xray):
-    compose, sink = run_agent_until_exported(e2e_out, fake_xray)
-    with compose:
-        resource_metrics = sink.metrics()
-        collector_ids = collector_instance_ids(compose.logs("agent"))
-    assert len(collector_ids) == 1, f"expected one collector instance ID in the agent's logs, got {collector_ids}"
+def test_self_metrics_keep_their_contract(collector_run):
+    config = collector_run.config
+    resource_metrics = collector_run.resource_metrics
+    collector_ids = collector_instance_ids(collector_run.logs_while_running)
+    assert len(collector_ids) == 1, f"expected one collector instance ID in the logs, got {collector_ids}"
     # Each collector's self-metrics must keep its own ID; a shared one would merge every collector into one series.
     assert self_metric_instance_ids(resource_metrics) == collector_ids
     contract = self_metric_contract(resource_metrics)
     if writing_contract():
-        CONTRACT_FIXTURE.write_text(json.dumps(contract, indent=2, sort_keys=True) + "\n")
+        config.fixture.write_text(json.dumps(contract, indent=2, sort_keys=True) + "\n")
         pytest.skip("wrote fixture; rerun without E2E_WRITE_CONTRACT to verify")
-    assert contract == json.loads(CONTRACT_FIXTURE.read_text())
+    assert contract == json.loads(config.fixture.read_text())
 
 
-def test_self_metrics_all_have_units(e2e_out, fake_xray):
-    compose, sink = run_agent_until_exported(e2e_out, fake_xray)
-    with compose:
-        contract = self_metric_contract(sink.metrics())
+def test_self_metrics_all_have_units(collector_run):
+    contract = self_metric_contract(collector_run.resource_metrics)
     without_unit = sorted(name for name, metric in contract["metrics"].items() if not metric["unit"])
     assert not without_unit, f"self-metrics reached the sink without a unit; extend transform/self-metrics: {without_unit}"
 
@@ -181,13 +276,10 @@ def cumulative_self_metric_points(resource_metrics):
                         yield (metric["name"], attributes, instance_id), metric["name"], point
 
 
-def test_cumulative_self_metrics_carry_stable_start_times(e2e_out, fake_xray):
+def test_cumulative_self_metrics_carry_stable_start_times(collector_run):
     """The backend rejects a cumulative point without a start time, and a start time that moves between exports reads
     as a reset on every export."""
-    compose, sink = run_agent_until_exported(e2e_out, fake_xray)
-    with compose:
-        resource_metrics = sink.metrics()
-    points = list(cumulative_self_metric_points(resource_metrics))
+    points = list(cumulative_self_metric_points(collector_run.resource_metrics))
     assert points, "no cumulative otelcol_ data points reached the sink"
     invalid = sorted({
         (name, point.get("startTimeUnixNano"), point["timeUnixNano"])
@@ -206,13 +298,10 @@ def test_cumulative_self_metrics_carry_stable_start_times(e2e_out, fake_xray):
     assert not moving, f"start times changed between exports; (name, start times): {moving}"
 
 
-def test_default_config_exits_cleanly_when_stopped(e2e_out, fake_xray):
-    compose, _ = run_agent_until_exported(e2e_out, fake_xray)
-    with compose:
-        compose.stop("agent", timeout_s=30)
-        code = compose.exit_code("agent")
-        tail = "\n".join(compose.logs("agent").splitlines()[-20:])
-        assert code == 0, f"agent exited with {code}; last log lines:\n{tail}"
+def test_exits_cleanly_when_stopped(collector_run):
+    service = collector_run.config.service
+    tail = "\n".join(collector_run.logs_after_stop.splitlines()[-20:])
+    assert collector_run.exit_code == 0, f"{service} exited with {collector_run.exit_code}; last log lines:\n{tail}"
 
 
 def send_gauge(port, name, value, service):
@@ -229,20 +318,7 @@ def send_gauge(port, name, value, service):
         assert response.status == 200, response.status
 
 
-def test_application_metrics_still_flow(e2e_out, fake_xray):
-    compose = Compose("agent-self-metrics.yaml", {"E2E_OUT": str(e2e_out), "FAKE_XRAY_PORT": str(fake_xray.port)})
-    with compose:
-        compose.up()
-        send_gauge(compose.port("agent", 55681), "e2e_application_gauge", 42.0, "foo-service")
-        sink = Sink(e2e_out, "sink")
-
-        def reached_sink():
-            return any(
-                m["name"] == "e2e_application_gauge"
-                for rm in sink.metrics() for sm in rm.get("scopeMetrics", []) for m in sm.get("metrics", []))
-
-        wait_until(reached_sink, timeout_s=30)
-        resource = next(rm["resource"] for rm in sink.metrics() for sm in rm.get("scopeMetrics", [])
-                        for m in sm.get("metrics", []) if m["name"] == "e2e_application_gauge")
-        assert _string_value(resource["attributes"], "service.name") == "foo-service"
-        assert _string_value(resource["attributes"], "deployment.environment.name") == "Test"
+def test_application_metrics_still_flow(collector_run):
+    attributes = collector_run.application_gauge_resource["attributes"]
+    assert _string_value(attributes, "service.name") == "foo-service"
+    assert _string_value(attributes, "deployment.environment.name") == "Test"

@@ -1,0 +1,9 @@
+# The prometheus/self receiver: scrapes the collector's own metrics endpoint. Shared by every config through a file
+# reference, so all of them collect self-metrics the same way.
+config:
+  scrape_configs:
+    - job_name: otelcol-custom
+      scrape_interval: 60s
+      static_configs:
+        - targets:
+            - 127.0.0.1:18888

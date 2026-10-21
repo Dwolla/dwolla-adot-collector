@@ -17,10 +17,19 @@ extensions:
   health_check:
     endpoint: 0.0.0.0:13133
 service:
-  extensions: [health_check]
+  extensions:
+    - health_check
   pipelines:
-    traces: {receivers: [otlp], exporters: [file/traces]}
-    metrics: {receivers: [otlp], exporters: [file/metrics]}
+    traces:
+      receivers:
+        - otlp
+      exporters:
+        - file/traces
+    metrics:
+      receivers:
+        - otlp
+      exporters:
+        - file/metrics
   telemetry:
     metrics:
       level: none
