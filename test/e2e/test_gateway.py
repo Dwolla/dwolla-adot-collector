@@ -59,7 +59,7 @@ def traces_evaluated_by_policy(sink):
                 for dp in metric["sum"]["dataPoints"]:
                     a = attrs(dp)
                     series = (a["policy"], a["decision"], a["sampled"])
-                    point = (int(dp["timeUnixNano"]), int(dp["asInt"]))
+                    point = (int(dp["timeUnixNano"]), int(dp["asInt"] if "asInt" in dp else dp["asDouble"]))  # the scrape delivers doubles
                     if series not in latest or point > latest[series]:
                         latest[series] = point
     evaluated = {}
