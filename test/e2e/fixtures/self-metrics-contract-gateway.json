@@ -183,6 +183,15 @@
       "type": "sum",
       "unit": "{traces}"
     },
+    "otelcol_processor_tail_sampling_early_releases_from_cache_decision": {
+      "aggregationTemporality": 2,
+      "dataPointAttributeKeys": [
+        "sampled"
+      ],
+      "isMonotonic": true,
+      "type": "sum",
+      "unit": "{spans}"
+    },
     "otelcol_processor_tail_sampling_global_count_traces_sampled": {
       "aggregationTemporality": 2,
       "dataPointAttributeKeys": [

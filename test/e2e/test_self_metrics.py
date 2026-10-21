@@ -6,20 +6,20 @@ asserts on what that one run captured. The gateways reach tail-sampling decision
 load-balances traces to two stand-in gateways.
 
 The contract fixture is the contract of the old push path, where the collector pushed its own metrics over OTLP to its
-own receiver. The pull path (metrics/self) must reproduce it. Regenerating the fixture from this config would only
-record the pull path's own output and prove nothing, so regenerate it from an image built with a push-path config.
-The three gateway configs were push-path through 0369abf, so to regenerate a gateway fixture, check out 0369abf in
-step 1 and use the same commands:
+own receiver. The pull path (metrics/self) must reproduce it. Regenerating the fixture from the pull path would only
+record its own output and prove nothing, so regenerate from an image built with a push-path config:
 
-1. git clone . /tmp/push-ref && git -C /tmp/push-ref checkout b03703f
-   (the last commit with the push-path config; after a collector upgrade, check out the upgrade instead and set
-   otel-config.yaml back to the push path: the periodic OTLP reader to localhost:4317, without prometheus/self and
-   metrics/self)
+1. Copy this tree to a temporary directory (git archive HEAD | tar -x -C /tmp/push-ref) and, there:
+   - default fixture: change otel-config.yaml back to a push reader (a periodic OTLP reader to localhost:4317, without
+     prometheus/self and metrics/self);
+   - gateway fixtures: take otel-gateway.yaml and otel-gateway-xray.yaml (and otel-agent-gateway.yaml for the
+     agent-gateway one) from 0369abf, the last commit where they were push-path (git show 0369abf:<file>).
 2. docker buildx build --load --tag dwolla/otel-collector:push-ref /tmp/push-ref
 3. From this checkout (the config comes from the image):
    OTELCOL_IMAGE=dwolla/otel-collector:push-ref E2E_WRITE_CONTRACT=1 target/venv/bin/pytest test/e2e/test_self_metrics.py -k contract
-   (add -k "contract and <config id>" to write one config's fixture)
-4. docker image rm dwolla/otel-collector:push-ref && rm -rf /tmp/push-ref, then run make check against this config.
+   (write only the fixtures of the configs you converted: -k "contract and <config id>"), then review the fixture diff.
+4. docker image rm dwolla/otel-collector:push-ref && rm -rf /tmp/push-ref, rebuild the image with make core, and run
+   make check.
 """
 import json
 import os
@@ -38,6 +38,8 @@ FIXTURES = Path(__file__).parent / "fixtures"
 EXPORT_INTERVAL_S = 60
 # A gateway's tail sampler holds a trace for its decision wait before the first decision metrics exist.
 DECISION_WAIT_S = 30
+# The sampler checks for due decisions on a one-second tick, so a span sent this long after the wait is late.
+LATE_SPAN_MARGIN_S = 5
 # 30 traces of 3 spans in one request: more than batch/traces' send_batch_size (50) at once, so a batch is sent by size
 TRACE_COUNT = 30
 SECOND_CYCLE_METRIC = "otelcol_exporter_sent_metric_points"
@@ -56,6 +58,7 @@ class Config:
     otlp_port: int
     fixture: Path
     error_traces: bool = False
+    decides_traces: bool = False
     wait_extra_s: int = 0
     generation_required: frozenset = frozenset()
 
@@ -71,6 +74,7 @@ AGENT_GATEWAY_ONLY = frozenset({
 })
 GATEWAY_ONLY = frozenset({
     "otelcol_processor_tail_sampling_count_traces_sampled",
+    "otelcol_processor_tail_sampling_early_releases_from_cache_decision",
 })
 CONFIGS = [
     Config("default", "agent-self-metrics.yaml", "agent", 55681, FIXTURES / "self-metrics-contract.json",
@@ -79,10 +83,10 @@ CONFIGS = [
            FIXTURES / "self-metrics-contract-agent-gateway.json",
            generation_required=SPAN_FLOW | AGENT_GATEWAY_ONLY),
     Config("gateway", "gateway-self-metrics.yaml", "gateway", 4318, FIXTURES / "self-metrics-contract-gateway.json",
-           error_traces=True, wait_extra_s=DECISION_WAIT_S, generation_required=SPAN_FLOW | GATEWAY_ONLY),
+           error_traces=True, decides_traces=True, wait_extra_s=DECISION_WAIT_S, generation_required=SPAN_FLOW | GATEWAY_ONLY),
     Config("gateway-xray", "gateway-xray-self-metrics.yaml", "gateway", 4318,
            FIXTURES / "self-metrics-contract-gateway-xray.json",
-           error_traces=True, wait_extra_s=DECISION_WAIT_S, generation_required=SPAN_FLOW | GATEWAY_ONLY),
+           error_traces=True, decides_traces=True, wait_extra_s=DECISION_WAIT_S, generation_required=SPAN_FLOW | GATEWAY_ONLY),
 ]
 
 def _keys(attributes):
@@ -186,12 +190,19 @@ def application_gauge_reached_sink(sink):
 
 def drive_collector(config, compose, sink):
     """Starts the config, sends it a burst of traces, waits until every expected self-metric has reached the sink
-    (two export cycles), and snapshots the sink and logs. Only then sends the application gauge, so it can't show up in
+    (two export cycles; a gateway also gets late spans), and snapshots the sink and logs. Only then sends the application gauge, so it can't show up in
     the self-metric snapshot, waits for it, and stops the collector to record its exit code."""
     compose.up()
     builder = TraceBuilder(seed=1)
     port = compose.port(config.service, config.otlp_port)
-    send_traces(port, [builder.trace(spans=3, error=config.error_traces and i % 5 == 0) for i in range(TRACE_COUNT)])
+    traces = [builder.trace(spans=3, error=config.error_traces and i % 5 == 0) for i in range(TRACE_COUNT)]
+    send_traces(port, traces)
+    if config.decides_traces:
+        # Once the decisions are made, a further span of each trace is a late span: the sampler answers it from its
+        # decision cache. (sampling_late_span_age can't be pinned here: it is only recorded for a decided trace that is
+        # not in that cache, which the gateway's cache sizes never allow.)
+        time.sleep(DECISION_WAIT_S + LATE_SPAN_MARGIN_S)
+        send_traces(port, traces, spans_of=lambda t: t.spans[:1])
     expected = expected_self_metric_names(config)
     wait_until(lambda: has_self_metrics(sink, expected), timeout_s=2 * EXPORT_INTERVAL_S + 30 + config.wait_extra_s)
     resource_metrics = sink.metrics()
