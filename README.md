@@ -58,6 +58,12 @@ The image ships four configs. The default is the agent config; choose another by
 Both gateway configs embed the same tail-sampling policy from `/etc/tail-sampling.yaml`. All four send metrics to
 CloudWatch as described above.
 
+Both agent configs add the `cloud.availability_zone` resource attribute to application metrics, using a resource
+detection processor configured in the shared `/etc/availability-zone.yaml` that reads the ECS task metadata endpoint.
+An availability zone the application already set is kept, and outside ECS the attribute is left off. Traces and the
+collector's own metrics don't get it. Detection runs once at startup; if the endpoint fails then, the collector logs
+a warning and runs without the attribute until it restarts.
+
 The self-metrics pieces (the Prometheus pull receiver, the self processors, the `metrics/self` pipeline, and
 `service.telemetry.metrics`) live in [`self-metrics/`](self-metrics) and are baked into the image at
 `/etc/self-metrics/`. All four configs include them with `${file:...}` references; `otel-config.yaml` is the

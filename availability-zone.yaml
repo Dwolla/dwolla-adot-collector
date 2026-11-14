@@ -1,0 +1,45 @@
+# The resourcedetection/availability-zone processor. Embedded into otel-config.yaml and otel-agent-gateway.yaml by file
+# reference; only their metrics pipelines use it.
+# Adds the task's availability zone to application metrics, and no other attribute. The ecs detector reads it from
+# the ECS task metadata endpoint, which every ECS container can reach. The ec2 detector would need the instance
+# metadata service (IMDS), whose session tokens don't reach containers on bridge networking when the instance's
+# response hop limit is 1.
+# override: false keeps an availability zone the application already set.
+# Detection runs once, at startup. If the endpoint keeps failing for the processor's timeout (5 s by default), the
+# collector logs a warning and runs without the availability zone until it restarts.
+detectors:
+  - ecs
+override: false
+ecs:
+  resource_attributes:
+    cloud.availability_zone:
+      enabled: true
+    # Every other attribute this detector knows is off, so the detector adds only the availability zone.
+    aws.ecs.cluster.arn:
+      enabled: false
+    aws.ecs.launchtype:
+      enabled: false
+    aws.ecs.task.arn:
+      enabled: false
+    aws.ecs.task.family:
+      enabled: false
+    aws.ecs.task.id:
+      enabled: false
+    aws.ecs.task.revision:
+      enabled: false
+    aws.log.group.arns:
+      enabled: false
+    aws.log.group.names:
+      enabled: false
+    aws.log.stream.arns:
+      enabled: false
+    aws.log.stream.names:
+      enabled: false
+    cloud.account.id:
+      enabled: false
+    cloud.platform:
+      enabled: false
+    cloud.provider:
+      enabled: false
+    cloud.region:
+      enabled: false
