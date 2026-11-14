@@ -1,0 +1,56 @@
+# Both agent configs as ECS-on-EC2 daemons: each reads the stub ECS task metadata endpoint, sends application metrics
+# to a sink instead of CloudWatch, and sends traces to the fake X-Ray (default config) or a gateway stand-in (gateway-
+# routing config). Start one agent per run.
+x-otelcol: &otelcol
+  image: ${OTELCOL_IMAGE:-dwolla/otel-collector:latest}
+  extra_hosts:
+    - host.docker.internal:host-gateway
+x-agent-env: &agent-env
+  - AWS_REGION=us-west-2
+  - AWS_ACCESS_KEY_ID=test
+  - AWS_SECRET_ACCESS_KEY=test
+  - DWOLLA_ENV=Test
+  - INTERIM_TRACE_SAMPLING_PERCENT=100
+  - ECS_CONTAINER_METADATA_URI_V4=${ECS_CONTAINER_METADATA_URI_V4}
+x-sink: &sink
+  <<: *otelcol
+  command:
+    - --config=/fixtures/sink.yaml
+  volumes:
+    - ../fixtures:/fixtures:ro
+    - ${E2E_OUT}:/out
+services:
+  agent-direct:
+    <<: *otelcol
+    command:
+      - --config=/etc/otel-config.yaml
+      - --set=exporters.awsxray.endpoint=http://host.docker.internal:${FAKE_XRAY_PORT}
+      - --set=exporters.otlphttp/cloudwatch.metrics_endpoint=http://sink:4318/v1/metrics
+    environment: *agent-env
+    ports:
+      - 127.0.0.1::55681
+    depends_on:
+      - sink
+  agent-gateway:
+    <<: *otelcol
+    command:
+      - --config=/etc/otel-agent-gateway.yaml
+      - --set=exporters.otlphttp/cloudwatch.metrics_endpoint=http://sink:4318/v1/metrics
+    environment: *agent-env
+    ports:
+      - 127.0.0.1::55681
+    depends_on:
+      - sink
+      - gw
+  sink:
+    <<: *sink
+    environment:
+      - SINK_NAME=sink
+  gw:
+    <<: *sink
+    environment:
+      - SINK_NAME=gw
+    networks:
+      default:
+        aliases:
+          - gateway.otel.internal

@@ -74,6 +74,7 @@ processors:
     mode: hash_seed
     hash_seed: 22
     sampling_percentage: ${env:INTERIM_TRACE_SAMPLING_PERCENT:-40}
+  resourcedetection/availability-zone: ${file:/etc/availability-zone.yaml}
   resource/metrics:
     attributes:
       - key: deployment.environment.name
@@ -139,6 +140,7 @@ service:
         - otlp
       processors:
         - memory_limiter
+        - resourcedetection/availability-zone
         - resource/metrics
         - batch/metrics
       exporters:
