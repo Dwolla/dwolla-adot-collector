@@ -28,11 +28,10 @@ import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from urllib.request import Request, urlopen
 
 import pytest
 
-from conftest import Compose, FakeXRay, Sink, TraceBuilder, _attr, send_traces, wait_until
+from conftest import Compose, FakeXRay, Sink, TraceBuilder, send_gauge, send_traces, wait_until
 
 FIXTURES = Path(__file__).parent / "fixtures"
 EXPORT_INTERVAL_S = 60
@@ -302,20 +301,6 @@ def test_exits_cleanly_when_stopped(collector_run):
     service = collector_run.config.service
     tail = "\n".join(collector_run.logs_after_stop.splitlines()[-20:])
     assert collector_run.exit_code == 0, f"{service} exited with {collector_run.exit_code}; last log lines:\n{tail}"
-
-
-def send_gauge(port, name, value, service):
-    payload = {"resourceMetrics": [{
-        "resource": {"attributes": [_attr("service.name", service)]},
-        "scopeMetrics": [{"scope": {"name": "e2e"}, "metrics": [{
-            "name": name,
-            "gauge": {"dataPoints": [{"asDouble": value, "timeUnixNano": str(time.time_ns())}]},
-        }]}],
-    }]}
-    request = Request(f"http://127.0.0.1:{port}/v1/metrics", data=json.dumps(payload).encode(),
-                      headers={"Content-Type": "application/json"}, method="POST")
-    with urlopen(request, timeout=10) as response:
-        assert response.status == 200, response.status
 
 
 def test_application_metrics_still_flow(collector_run):
